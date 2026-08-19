@@ -441,7 +441,18 @@ export const FlutterAppContainer: React.FC = () => {
         setActiveBannerAlert(highPriUnread);
       }
     });
-    return () => unsub();
+
+    const handleInAppAlert = (e: any) => {
+      if (e?.detail) {
+        setActiveBannerAlert(e.detail);
+      }
+    };
+    window.addEventListener('vastu_trigger_in_app_alert', handleInAppAlert);
+
+    return () => {
+      unsub();
+      window.removeEventListener('vastu_trigger_in_app_alert', handleInAppAlert);
+    };
   }, []);
 
   const handleMarkAllAlertsRead = () => {
@@ -1082,6 +1093,7 @@ export const FlutterAppContainer: React.FC = () => {
               currentDegree={currentDegree}
               onDegreeChange={setCurrentDegree}
               onAddRoomWithDegree={handleAddRoomWithDegree}
+              isActive={activeTab === 'compass'}
             />
             <div className="p-3 max-w-2xl mx-auto">
               <AdSenseUnit format="banner" slotId="vastu-bottom-banner-compass" />

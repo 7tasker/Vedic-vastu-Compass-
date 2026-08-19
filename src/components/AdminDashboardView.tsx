@@ -56,6 +56,16 @@ import {
   VastuRuleItem,
   VastuDbStats,
 } from '../utils/vastuKnowledgeDb';
+import {
+  clearAllTestingDataFromFirestore,
+  clearTestingPaymentsFromFirestore,
+  clearTestingAuditReportsFromFirestore,
+  clearTestingConsultationsFromFirestore,
+  clearTestingUserLocationsFromFirestore,
+  resetAdSenseTestingMetricsFromFirestore,
+  resetTestingUserMembershipsFromFirestore,
+  ResetDataResult,
+} from '../lib/firebase';
 import { AppIntroModal } from './AppIntroModal';
 import {
   collection,
@@ -103,6 +113,9 @@ import {
   Server,
   Code,
   Smartphone,
+  Trash2,
+  X,
+  AlertCircle,
   Terminal,
   Layers as LayersIcon,
   Upload,
@@ -307,6 +320,59 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
       console.error('Google Pay test error:', e);
     } finally {
       setTestingGPay(false);
+    }
+  };
+
+  // Backend Data Reset State
+  const [isResettingData, setIsResettingData] = useState<boolean>(false);
+  const [showResetModal, setShowResetModal] = useState<boolean>(false);
+  const [resetCategory, setResetCategory] = useState<'all' | 'payments' | 'reports' | 'consultations' | 'geotags' | 'adsense' | 'users'>('all');
+  const [resetConfirmationInput, setResetConfirmationInput] = useState<string>('');
+  const [lastResetResult, setLastResetResult] = useState<ResetDataResult | null>(null);
+
+  const handleExecuteDataReset = async (category: 'all' | 'payments' | 'reports' | 'consultations' | 'geotags' | 'adsense' | 'users') => {
+    setIsResettingData(true);
+    setAdminMsg('');
+    playTempleBellChime();
+
+    try {
+      if (category === 'all') {
+        const res = await clearAllTestingDataFromFirestore();
+        setLastResetResult(res);
+        setAdminMsg(`⚡ ${res.message}`);
+      } else if (category === 'payments') {
+        const count = await clearTestingPaymentsFromFirestore();
+        setAdminMsg(`⚡ Cleared ${count} testing payment records from Firestore.`);
+      } else if (category === 'reports') {
+        const count = await clearTestingAuditReportsFromFirestore();
+        setAdminMsg(`⚡ Cleared ${count} testing audit reports from Firestore.`);
+      } else if (category === 'consultations') {
+        const count = await clearTestingConsultationsFromFirestore();
+        setAdminMsg(`⚡ Cleared ${count} testing consultation messages from Firestore.`);
+      } else if (category === 'geotags') {
+        const count = await clearTestingUserLocationsFromFirestore();
+        setAdminMsg(`⚡ Cleared ${count} testing GPS geotags from Firestore.`);
+      } else if (category === 'adsense') {
+        await resetAdSenseTestingMetricsFromFirestore();
+        setAdminMsg(`⚡ Reset AdSense daily impressions and clicks to zero.`);
+      } else if (category === 'users') {
+        const count = await resetTestingUserMembershipsFromFirestore();
+        setAdminMsg(`⚡ Reset ${count} testing user memberships to free status.`);
+      }
+
+      // Refresh all backend data tables
+      await fetchAdminData();
+      await fetchAdminAuditReports();
+      await fetchAdminConsultations();
+      setGeotagRecords(getGeotagRecords());
+      setShowResetModal(false);
+      setResetConfirmationInput('');
+      playTempleBellChime();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Reset failed';
+      alert(`Backend reset notice: ${msg}`);
+    } finally {
+      setIsResettingData(false);
     }
   };
 
@@ -4052,6 +4118,209 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                   {vastuRules.length} Shastra Rules • {vastuDbStats.compactRulesCount} Mobile Offline Rules
                 </div>
               </div>
+
+              <div className="p-4 bg-[#FAF7F2] rounded-2xl border border-[#E8DCC4] space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-[#78350F]">audit_reports Collection</span>
+                  <CheckCircle2 className="w-4 h-4 text-[#059669]" />
+                </div>
+                <p className="text-[11px] text-[#8B735B]">
+                  Saved Vedic room audits, doshas, remedies, and PDF report records.
+                </p>
+                <div className="font-mono text-[10px] text-[#D97706]">
+                  {auditReportsList.length} Documents
+                </div>
+              </div>
+
+              <div className="p-4 bg-[#FAF7F2] rounded-2xl border border-[#E8DCC4] space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-[#78350F]">consultations Collection</span>
+                  <CheckCircle2 className="w-4 h-4 text-[#059669]" />
+                </div>
+                <p className="text-[11px] text-[#8B735B]">
+                  User Vedic consultation queries, floorplan submissions, and admin replies.
+                </p>
+                <div className="font-mono text-[10px] text-[#D97706]">
+                  {consultationsList.length} Documents
+                </div>
+              </div>
+            </div>
+
+            {/* BACKEND DATA RESET & TESTING PURGE CONTROLLER */}
+            <div className="mt-6 p-5 sm:p-6 bg-gradient-to-br from-[#FEF2F2] to-[#FFF1F2] rounded-3xl border-2 border-[#FECDD3] shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#FECDD3] pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-[#DC2626] text-white flex items-center justify-center font-bold shadow-sm shrink-0">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-serif font-black text-[#991B1B]">
+                      Backend Data Reset & Testing Data Purge
+                    </h4>
+                    <p className="text-xs text-[#7F1D1D]">
+                      Safely purge test transactions, dummy audit reports, testing queries, and reset metrics.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isResettingData}
+                  onClick={() => {
+                    setResetCategory('all');
+                    setResetConfirmationInput('');
+                    setShowResetModal(true);
+                  }}
+                  className="px-4 py-2.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Zap className="w-4 h-4 text-amber-300" />
+                  <span>{isResettingData ? 'Resetting Data...' : '⚡ Clear All Testing Data'}</span>
+                </button>
+              </div>
+
+              {/* Granular Reset Options Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1 text-xs">
+                {/* 1. Clear Payments */}
+                <div className="bg-white p-3.5 rounded-2xl border border-[#FECDD3] flex flex-col justify-between space-y-2">
+                  <div>
+                    <span className="font-bold text-[#991B1B] block">Payments Data Reset</span>
+                    <span className="text-[11px] text-[#7F1D1D] block">
+                      Purges testing receipts from Firestore `payments` collection.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isResettingData}
+                    onClick={() => {
+                      setResetCategory('payments');
+                      setResetConfirmationInput('');
+                      setShowResetModal(true);
+                    }}
+                    className="w-full py-2 bg-[#FEE2E2] hover:bg-[#FECDD3] text-[#991B1B] font-bold rounded-xl transition-colors cursor-pointer text-center"
+                  >
+                    Clear Payments ({paymentList.length})
+                  </button>
+                </div>
+
+                {/* 2. Clear Audit Reports */}
+                <div className="bg-white p-3.5 rounded-2xl border border-[#FECDD3] flex flex-col justify-between space-y-2">
+                  <div>
+                    <span className="font-bold text-[#991B1B] block">Audit Reports Reset</span>
+                    <span className="text-[11px] text-[#7F1D1D] block">
+                      Purges test audit reports from Firestore `audit_reports`.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isResettingData}
+                    onClick={() => {
+                      setResetCategory('reports');
+                      setResetConfirmationInput('');
+                      setShowResetModal(true);
+                    }}
+                    className="w-full py-2 bg-[#FEE2E2] hover:bg-[#FECDD3] text-[#991B1B] font-bold rounded-xl transition-colors cursor-pointer text-center"
+                  >
+                    Clear Audit Reports ({auditReportsList.length})
+                  </button>
+                </div>
+
+                {/* 3. Clear Consultations */}
+                <div className="bg-white p-3.5 rounded-2xl border border-[#FECDD3] flex flex-col justify-between space-y-2">
+                  <div>
+                    <span className="font-bold text-[#991B1B] block">Consultations Reset</span>
+                    <span className="text-[11px] text-[#7F1D1D] block">
+                      Purges testing query messages from `consultations`.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isResettingData}
+                    onClick={() => {
+                      setResetCategory('consultations');
+                      setResetConfirmationInput('');
+                      setShowResetModal(true);
+                    }}
+                    className="w-full py-2 bg-[#FEE2E2] hover:bg-[#FECDD3] text-[#991B1B] font-bold rounded-xl transition-colors cursor-pointer text-center"
+                  >
+                    Clear Queries ({consultationsList.length})
+                  </button>
+                </div>
+
+                {/* 4. Clear Geotags */}
+                <div className="bg-white p-3.5 rounded-2xl border border-[#FECDD3] flex flex-col justify-between space-y-2">
+                  <div>
+                    <span className="font-bold text-[#991B1B] block">GPS Geotags Reset</span>
+                    <span className="text-[11px] text-[#7F1D1D] block">
+                      Clears test user location pins from Firestore `user_locations`.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isResettingData}
+                    onClick={() => {
+                      setResetCategory('geotags');
+                      setResetConfirmationInput('');
+                      setShowResetModal(true);
+                    }}
+                    className="w-full py-2 bg-[#FEE2E2] hover:bg-[#FECDD3] text-[#991B1B] font-bold rounded-xl transition-colors cursor-pointer text-center"
+                  >
+                    Clear Geotags ({geotagRecords.length})
+                  </button>
+                </div>
+
+                {/* 5. Reset AdSense Metrics */}
+                <div className="bg-white p-3.5 rounded-2xl border border-[#FECDD3] flex flex-col justify-between space-y-2">
+                  <div>
+                    <span className="font-bold text-[#991B1B] block">AdSense Daily Metrics Reset</span>
+                    <span className="text-[11px] text-[#7F1D1D] block">
+                      Resets impression counts, simulated clicks & ad revenue to 0.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isResettingData}
+                    onClick={() => {
+                      setResetCategory('adsense');
+                      setResetConfirmationInput('');
+                      setShowResetModal(true);
+                    }}
+                    className="w-full py-2 bg-[#FEE2E2] hover:bg-[#FECDD3] text-[#991B1B] font-bold rounded-xl transition-colors cursor-pointer text-center"
+                  >
+                    Reset Ad Impressions (0)
+                  </button>
+                </div>
+
+                {/* 6. Reset User Memberships */}
+                <div className="bg-white p-3.5 rounded-2xl border border-[#FECDD3] flex flex-col justify-between space-y-2">
+                  <div>
+                    <span className="font-bold text-[#991B1B] block">User Test Profiles Reset</span>
+                    <span className="text-[11px] text-[#7F1D1D] block">
+                      Resets non-admin test accounts back to Free tier.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isResettingData}
+                    onClick={() => {
+                      setResetCategory('users');
+                      setResetConfirmationInput('');
+                      setShowResetModal(true);
+                    }}
+                    className="w-full py-2 bg-[#FEE2E2] hover:bg-[#FECDD3] text-[#991B1B] font-bold rounded-xl transition-colors cursor-pointer text-center"
+                  >
+                    Reset User Passes ({userList.filter((u) => u.isProMember).length} Pro)
+                  </button>
+                </div>
+              </div>
+
+              {lastResetResult && (
+                <div className="p-3 bg-white rounded-2xl border border-[#FECDD3] text-xs text-[#065F46] font-medium space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-[#059669]">
+                    <CheckCircle2 className="w-4 h-4" /> Last Reset Executed Successfully
+                  </div>
+                  <p className="text-[11px] text-[#3D342D]">{lastResetResult.message}</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -4971,6 +5240,102 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
               >
                 <Check className="w-4 h-4 text-[#D97706]" />
                 <span>OK, Great</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Backend Data Reset Safety Confirmation Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-fadeIn font-sans">
+          <div className="bg-[#FFFDFD] border-2 border-[#DC2626] rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4 text-[#3D342D]">
+            <div className="flex items-center justify-between border-b border-[#FECDD3] pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-[#FEF2F2] border border-[#FCA5A5] text-[#DC2626] shrink-0">
+                  <Trash2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#DC2626] block">
+                    Firestore Database Management
+                  </span>
+                  <h3 className="text-base font-serif font-black text-[#991B1B]">
+                    {resetCategory === 'all'
+                      ? 'Purge All Testing Data & Reset Backend'
+                      : resetCategory === 'payments'
+                      ? 'Clear Testing Payment Records'
+                      : resetCategory === 'reports'
+                      ? 'Clear Testing Audit Reports'
+                      : resetCategory === 'consultations'
+                      ? 'Clear Testing Consultations'
+                      : resetCategory === 'geotags'
+                      ? 'Clear Testing GPS Geotags'
+                      : resetCategory === 'adsense'
+                      ? 'Reset AdSense Daily Metrics'
+                      : 'Reset User Membership Status'}
+                  </h3>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowResetModal(false)}
+                disabled={isResettingData}
+                className="p-1.5 rounded-full text-[#8B735B] hover:bg-[#FEE2E2] transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5 text-[#991B1B]" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-[#FEF2F2] rounded-2xl border border-[#FECDD3] text-xs text-[#7F1D1D] space-y-2">
+              <p className="font-bold flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-[#DC2626] shrink-0" />
+                <span>Permanent Database Operation Warning:</span>
+              </p>
+              <p className="leading-relaxed">
+                {resetCategory === 'all'
+                  ? 'This will permanently remove all test payments, saved test audit reports, dummy consultation requests, test GPS location pins from Firestore, and reset AdSense testing counters back to initial zero state.'
+                  : `This will permanently delete records from the selected '${resetCategory}' Firestore collection and clear local cached testing state.`}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-[#78350F]">
+                Type <span className="font-mono text-[#DC2626] bg-[#FEE2E2] px-1.5 py-0.5 rounded font-black">RESET</span> to confirm:
+              </label>
+              <input
+                type="text"
+                value={resetConfirmationInput}
+                onChange={(e) => setResetConfirmationInput(e.target.value)}
+                placeholder="Type RESET to confirm..."
+                className="w-full p-3 bg-white border-2 border-[#FECDD3] rounded-xl text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-[#DC2626] text-[#3D342D]"
+              />
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-end gap-2">
+              <button
+                type="button"
+                disabled={isResettingData}
+                onClick={() => setShowResetModal(false)}
+                className="w-full sm:w-auto px-4 py-2.5 bg-[#F3EFE0] hover:bg-[#E8DCC4] text-[#78350F] font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isResettingData || resetConfirmationInput.trim().toUpperCase() !== 'RESET'}
+                onClick={() => handleExecuteDataReset(resetCategory)}
+                className="w-full sm:w-auto px-5 py-2.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isResettingData ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                    <span>Purging Data...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 text-white" />
+                    <span>Execute Data Reset</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

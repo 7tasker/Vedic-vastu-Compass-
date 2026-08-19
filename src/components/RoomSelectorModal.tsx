@@ -126,14 +126,14 @@ export const RoomSelectorModal: React.FC<RoomSelectorModalProps> = ({
                   key={room.id}
                   type="button"
                   onClick={() => handleRoomClick(room.id)}
-                  className={`p-2.5 sm:p-3 rounded-2xl border-2 transition-all flex items-center gap-2.5 text-left cursor-pointer group ${
+                  className={`p-2 sm:p-2.5 rounded-2xl border-2 transition-all flex items-center gap-2 text-left cursor-pointer group min-h-[58px] ${
                     isSelected
                       ? 'bg-[#FFFBEB] border-[#D97706] shadow-md ring-2 ring-[#D97706]/30'
                       : 'bg-white border-[#E8DCC4] hover:border-[#D97706] hover:bg-[#FFFDF9] shadow-2xs'
                   }`}
                 >
                   <div
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border transition-transform group-hover:scale-105 ${
                       isSelected
                         ? 'bg-[#78350F] text-white border-[#D97706]'
                         : 'bg-[#FFFBEB] text-[#78350F] border-[#FDE68A]'
@@ -142,20 +142,20 @@ export const RoomSelectorModal: React.FC<RoomSelectorModalProps> = ({
                     {getRoomIconComponent(room.iconName, 'w-4 h-4')}
                   </div>
 
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 flex flex-col justify-center">
                     <span
-                      className={`text-xs font-serif font-bold truncate block leading-tight ${
+                      className={`text-[11px] sm:text-xs font-serif font-bold leading-tight line-clamp-2 ${
                         isSelected ? 'text-[#78350F]' : 'text-[#3D342D]'
                       }`}
                     >
                       {room.label}
                     </span>
                     {room.id === 'entrance' ? (
-                      <span className="text-[9.5px] font-sans font-bold text-[#D97706] bg-[#FFFBEB] px-1.5 py-0.5 rounded border border-[#FDE68A] inline-block mt-0.5">
+                      <span className="text-[9px] font-sans font-bold text-[#D97706] bg-[#FFFBEB] px-1.5 py-0.2 rounded border border-[#FDE68A] inline-block mt-0.5 self-start">
                         Facing Exit
                       </span>
                     ) : room.hindiName ? (
-                      <span className="text-[10px] text-[#8B735B] truncate block mt-0.5 opacity-80">
+                      <span className="text-[9.5px] text-[#8B735B] truncate block mt-0.5 opacity-80 leading-tight">
                         {room.hindiName}
                       </span>
                     ) : null}

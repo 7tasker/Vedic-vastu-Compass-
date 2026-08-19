@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { VASTU_ZONES, ROOM_DEFINITIONS } from '../data/vastuData';
 import { getZoneFromDegree, playTempleBellChime } from '../utils/vastuUtils';
 import { recordUserLocationInFirestore } from '../lib/firebase';
@@ -38,6 +38,7 @@ interface VastuCompassViewProps {
   currentDegree: number;
   onDegreeChange: (deg: number) => void;
   onAddRoomWithDegree?: (roomType: string, deg: number, customLabel?: string) => void;
+  isActive?: boolean;
 }
 
 /**
@@ -57,6 +58,7 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
   currentDegree: rawDegree,
   onDegreeChange,
   onAddRoomWithDegree,
+  isActive = true,
 }) => {
   const [isSensorActive, setIsSensorActive] = useState<boolean>(() => {
     const saved = localStorage.getItem('vastudrishti_compass_sensor_mode');
@@ -199,6 +201,47 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
   const effectiveDegree = Math.round(((rawDegree + calibrationOffset) % 360 + 360) % 360);
   const currentZone = getZoneFromDegree(effectiveDegree);
 
+  // Smooth sub-degree hardware-accelerated visual angle tracking
+  const [visualRotationDeg, setVisualRotationDeg] = useState<number>(effectiveDegree);
+  const targetAngleRef = useRef<number>(effectiveDegree);
+  const currentVisualAngleRef = useRef<number>(effectiveDegree);
+  const animFrameIdRef = useRef<number | null>(null);
+
+  // Synchronize target angle when rawDegree or calibrationOffset changes
+  useEffect(() => {
+    targetAngleRef.current = ((rawDegree + calibrationOffset) % 360 + 360) % 360;
+  }, [rawDegree, calibrationOffset]);
+
+  // Buttery-smooth 60fps/120fps continuous interpolation loop without 0/360 wrap glitch
+  // Pauses automatically when user leaves compass tab and resumes on focus
+  useEffect(() => {
+    if (!isActive) {
+      if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
+      return;
+    }
+
+    const loop = () => {
+      const target = targetAngleRef.current;
+      const current = currentVisualAngleRef.current;
+      
+      // Compute shortest angular distance between current and target (-180 to +180)
+      const diff = ((target - (current % 360) + 540) % 360) - 180;
+      
+      if (Math.abs(diff) > 0.01) {
+        // High-responsiveness smoothing factor (0.28 per frame)
+        const next = current + diff * (isSensorActive ? 0.28 : 0.45);
+        currentVisualAngleRef.current = next;
+        setVisualRotationDeg(next);
+      }
+      animFrameIdRef.current = requestAnimationFrame(loop);
+    };
+
+    animFrameIdRef.current = requestAnimationFrame(loop);
+    return () => {
+      if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
+    };
+  }, [isActive, isSensorActive]);
+
   // Sensor Health & Accuracy State
   const [sensorHealth, setSensorHealth] = useState<'high' | 'medium' | 'needs_calibration' | 'manual'>(() => {
     if (!isInitialCalibrationDone) return 'needs_calibration';
@@ -211,9 +254,10 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
   const [sensorApiType, setSensorApiType] = useState<string>('Standard Sensor');
 
   // Device orientation & magnetometer listener for Android and iOS
+  // Pauses all hardware sensor polling when user is on another tab to save battery & prevent background interference
   useEffect(() => {
-    if (!isSensorActive) {
-      setSensorHealth('manual');
+    if (!isActive || !isSensorActive) {
+      if (!isSensorActive) setSensorHealth('manual');
       setNeedsCalibrationPrompt(false);
       return;
     }
@@ -265,6 +309,9 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
       }
 
       if (alpha !== null && !isNaN(alpha)) {
+        // Feed continuous angle directly to target for smooth visual interpolation
+        const normalized = ((alpha + calibrationOffset) % 360 + 360) % 360;
+        targetAngleRef.current = normalized;
         onDegreeChange(Math.round(alpha));
       }
     };
@@ -303,7 +350,7 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
         try { magSensor.stop(); } catch {}
       }
     };
-  }, [isSensorActive, onDegreeChange, needsCalibrationPrompt, isInitialCalibrationDone]);
+  }, [isActive, isSensorActive, onDegreeChange, needsCalibrationPrompt, isInitialCalibrationDone, calibrationOffset]);
 
   const toggleSensor = async () => {
     if (isSensorActive) {
@@ -546,8 +593,8 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
 
           {/* Rotating Dial Circle */}
           <div
-            className="absolute inset-5 rounded-full border border-[#E8DCC4] transition-transform duration-300 ease-out flex items-center justify-center"
-            style={{ transform: `rotate(${-effectiveDegree}deg)` }}
+            className="absolute inset-5 rounded-full border border-[#E8DCC4] flex items-center justify-center will-change-transform"
+            style={{ transform: `rotate(${-visualRotationDeg}deg)` }}
           >
             {/* 16 Zone Spokes & Labels */}
             {VASTU_ZONES.map((zone) => {
@@ -561,16 +608,16 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
               return (
                 <div
                   key={zone.code}
-                  className="absolute transition-transform flex items-center justify-center"
+                  className="absolute flex items-center justify-center will-change-transform"
                   style={{ transform: `translate(${x}px, ${y}px)` }}
                 >
                   <span
-                    className={`text-[10px] font-sans font-extrabold px-2 py-0.5 rounded-full border transition-all ${
+                    className={`text-[10px] font-sans font-extrabold px-2 py-0.5 rounded-full border transition-colors ${
                       isSelected
                         ? 'bg-[#78350F] text-[#FCFAF7] border-[#D97706] scale-125 z-20 shadow-md ring-2 ring-[#D97706]/40'
-                        : 'bg-[#FCFAF7]/90 text-[#8B735B] border-[#E8DCC4] hover:scale-110'
+                        : 'bg-[#FCFAF7]/90 text-[#8B735B] border-[#E8DCC4]'
                     }`}
-                    style={{ transform: `rotate(${effectiveDegree}deg)` }}
+                    style={{ transform: `rotate(${visualRotationDeg}deg)` }}
                   >
                     {zone.code}
                   </span>
@@ -580,7 +627,7 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
 
             {/* Inner Sacred Mandala Sun Dial */}
             <div className="w-32 h-32 rounded-full border-2 border-dashed border-[#D97706]/50 bg-[#FFFBEB] flex items-center justify-center relative shadow-xs">
-              <div className="text-center" style={{ transform: `rotate(${effectiveDegree}deg)` }}>
+              <div className="text-center will-change-transform" style={{ transform: `rotate(${visualRotationDeg}deg)` }}>
                 <span className="text-xl font-serif font-extrabold text-[#78350F] block">{currentZone.code}</span>
                 <span className="text-[10px] font-sans uppercase tracking-wider text-[#A68A64] font-bold block">{currentZone.shortName}</span>
               </div>
@@ -689,6 +736,9 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                 const val = parseInt(e.target.value, 10);
                 // Calculate adjusted raw degree based on calibration offset
                 const newRaw = Math.round(((val - calibrationOffset) % 360 + 360) % 360);
+                targetAngleRef.current = val;
+                currentVisualAngleRef.current = val;
+                setVisualRotationDeg(val);
                 onDegreeChange(newRaw);
               }}
               className="w-full h-3 bg-[#FFFBEB] border-2 border-[#D97706] rounded-full appearance-none cursor-pointer accent-[#D97706] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#D97706]"

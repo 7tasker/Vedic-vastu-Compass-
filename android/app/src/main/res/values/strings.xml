@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vastu Compass</string>
+    <string name="title_activity_main">Vastu Compass</string>
+    <string name="package_name">com.seventasker.vastucompass</string>
+    <string name="custom_url_scheme">vastucompass</string>
+</resources>

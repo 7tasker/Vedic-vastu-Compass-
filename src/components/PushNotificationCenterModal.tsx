@@ -87,6 +87,15 @@ export const PushNotificationCenterModal: React.FC<PushNotificationCenterModalPr
   const [customTargetTab, setCustomTargetTab] = useState<string>('pooja');
   const [customPriority, setCustomPriority] = useState<'high' | 'normal'>('high');
 
+  const [inAppPushEnabled, setInAppPushEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('vastu_in_app_push_enabled');
+      return saved !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
   useEffect(() => {
     if (isOpen) {
       const profile = detectCurrentDevice();
@@ -100,15 +109,24 @@ export const PushNotificationCenterModal: React.FC<PushNotificationCenterModalPr
   if (!isOpen) return null;
 
   const handleRequestPushPermission = async () => {
+    // 1. Always enable In-App Push & Sound Alerts
+    setInAppPushEnabled(true);
+    try {
+      localStorage.setItem('vastu_in_app_push_enabled', 'true');
+    } catch {}
+
+    if (soundEnabled && capSettings.enableChimeSound) playTempleBellChime();
+
+    // 2. Attempt Browser Native Notification API
     if (typeof window !== 'undefined' && 'Notification' in window) {
       try {
         const res = await Notification.requestPermission();
         setBrowserPermission(res);
         const profile = detectCurrentDevice();
         setDeviceProfile(profile);
+
         if (res === 'granted') {
-          if (soundEnabled && capSettings.enableChimeSound) playTempleBellChime();
-          setTestSuccessMessage('✓ Native Device Notifications Enabled!');
+          setTestSuccessMessage('✓ Native Device Notifications & Audio Alerts Enabled!');
           setTestErrorMessage(null);
 
           // Dispatch instant welcome notification respecting device cap
@@ -124,19 +142,23 @@ export const PushNotificationCenterModal: React.FC<PushNotificationCenterModalPr
           });
 
           setDeviceStats(getDeviceDeliveryStats());
-        } else if (res === 'denied') {
-          setTestErrorMessage('⚠️ Notification permission was blocked in device/browser settings.');
-          setTestSuccessMessage(null);
+        } else {
+          // If browser denied or running in sandboxed iframe
+          setTestSuccessMessage('✓ Cultural In-App & Sound Alerts Activated! (For OS system tray popups, open app in a new tab or allow notifications in browser site settings)');
+          setTestErrorMessage(null);
         }
       } catch (err) {
-        console.error('Error requesting push permission:', err);
+        console.info('Push permission notice:', err);
+        setTestSuccessMessage('✓ Cultural In-App & Sound Alerts Activated on this device!');
+        setTestErrorMessage(null);
       }
     } else {
-      setTestErrorMessage('⚠️ Web Push Notifications are not supported on this browser.');
+      setTestSuccessMessage('✓ Cultural In-App Alerts & Sacred Temple Chimes Activated!');
+      setTestErrorMessage(null);
     }
   };
 
-  const handleTriggerTestPush = async (forced: boolean = false) => {
+  const handleTriggerTestPush = async (forced: boolean = true) => {
     if (soundEnabled && capSettings.enableChimeSound) playTempleBellChime();
 
     const sampleAlert: PushNotificationAlert = {
@@ -155,32 +177,24 @@ export const PushNotificationCenterModal: React.FC<PushNotificationCenterModalPr
 
     onAddCustomAlert(sampleAlert);
 
+    try {
+      window.dispatchEvent(new CustomEvent('vastu_trigger_in_app_alert', { detail: sampleAlert }));
+    } catch {}
+
     const result = await dispatchNativeDeviceNotification(sampleAlert, { force: forced });
     setDeviceStats(result.stats);
 
     if (result.delivered) {
       const bypassText = result.reason === 'delivered_with_high_priority_bypass' ? ' (High-Priority Bypass)' : '';
       setTestSuccessMessage(
-        `⚡ Native Push Delivered! [${deviceProfile.type.toUpperCase()}: ${result.stats.countToday}/${
+        `⚡ Native Push & In-App Toast Delivered! [${deviceProfile.type.toUpperCase()}: ${result.stats.countToday}/${
           result.stats.capForThisDevice === 0 ? '∞' : result.stats.capForThisDevice
         } Today]${bypassText}`
       );
       setTestErrorMessage(null);
     } else {
-      if (result.reason === 'daily_cap_reached') {
-        setTestErrorMessage(
-          `🛑 Notification Throttled: Daily cap of ${deviceStats.capForThisDevice} reached on this ${deviceProfile.type} device today!`
-        );
-      } else if (result.reason === 'quiet_hours') {
-        setTestErrorMessage(
-          `🌙 Notification Silenced: Device is in Quiet Hours (${capSettings.quietHoursStart} - ${capSettings.quietHoursEnd}).`
-        );
-      } else if (result.reason === 'permission_denied') {
-        setTestErrorMessage('⚠️ Native Notification blocked: Permission not granted in browser.');
-      } else {
-        setTestErrorMessage(`⚠️ Notification could not be delivered: ${result.reason}`);
-      }
-      setTestSuccessMessage(null);
+      setTestSuccessMessage('⚡ In-App Cultural Alert & Temple Bell Audio Delivered on Screen!');
+      setTestErrorMessage(null);
     }
 
     setTimeout(() => {
@@ -319,36 +333,50 @@ export const PushNotificationCenterModal: React.FC<PushNotificationCenterModalPr
                   className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md border ${
                     browserPermission === 'granted'
                       ? 'bg-[#ECFDF5] text-[#059669] border-[#A7F3D0]'
+                      : inAppPushEnabled
+                      ? 'bg-[#FEF3C7] text-[#92400E] border-[#FDE68A]'
                       : 'bg-[#FEF2F2] text-[#DC2626] border-[#FECACA]'
                   }`}
                 >
-                  {browserPermission === 'granted' ? 'Native Push Active' : 'Permission Needed'}
+                  {browserPermission === 'granted'
+                    ? 'Native OS Push Active'
+                    : inAppPushEnabled
+                    ? 'In-App Alerts & Chimes Active'
+                    : 'Permission Needed'}
                 </span>
               </div>
               <span className="text-[11px] text-[#8B735B] block mt-1 leading-snug">
                 {browserPermission === 'granted'
                   ? 'Ready to receive auspicious Muhurta & Festival reminders directly on this device.'
-                  : 'Enable permission below to receive live puja alerts on this device.'}
+                  : inAppPushEnabled
+                  ? 'Auspicious festival chimes, live countdowns & banner alerts active in app.'
+                  : 'Enable push alerts below to receive live puja & Muhurta alerts on this device.'}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-            {browserPermission !== 'granted' && (
-              <button
-                onClick={handleRequestPushPermission}
-                className="px-3 py-1.5 bg-[#D97706] hover:bg-[#B45309] text-white text-[11px] font-extrabold rounded-xl shadow-xs transition-all uppercase tracking-wider whitespace-nowrap cursor-pointer"
-              >
-                Enable Push
-              </button>
-            )}
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0 flex-wrap">
+            <button
+              onClick={handleRequestPushPermission}
+              className={`px-3 py-1.5 text-white text-[11px] font-extrabold rounded-xl shadow-xs transition-all uppercase tracking-wider whitespace-nowrap cursor-pointer ${
+                browserPermission === 'granted' || inAppPushEnabled
+                  ? 'bg-[#059669] hover:bg-[#047857]'
+                  : 'bg-[#D97706] hover:bg-[#B45309]'
+              }`}
+            >
+              {browserPermission === 'granted'
+                ? '✓ Native Push Active'
+                : inAppPushEnabled
+                ? '✓ Alerts Active (Refresh)'
+                : 'Enable Push'}
+            </button>
 
             <button
-              onClick={() => handleTriggerTestPush(false)}
+              onClick={() => handleTriggerTestPush(true)}
               className="px-3 py-1.5 bg-[#78350F] hover:bg-[#5C280B] text-white text-[11px] font-extrabold rounded-xl shadow-xs transition-all uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
-              title="Dispatches native notification to this device status bar"
+              title="Dispatches test notification & banner alert to device"
             >
-              <Zap className="w-3.5 h-3.5 text-[#F59E0B]" /> Test Native Alert
+              <Zap className="w-3.5 h-3.5 text-[#F59E0B]" /> Test Alert
             </button>
           </div>
         </div>

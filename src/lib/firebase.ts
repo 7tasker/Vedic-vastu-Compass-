@@ -21,6 +21,7 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   addDoc,
 } from 'firebase/firestore';
@@ -987,3 +988,219 @@ export const loadUserPropertiesFromFirestore = async (
 
   return localProperties;
 };
+
+// =========================================================================
+// BACKEND DATA RESET & PURGE UTILITIES (CLEAR TESTING DATA)
+// =========================================================================
+
+export interface ResetDataResult {
+  success: boolean;
+  deletedPayments: number;
+  deletedReports: number;
+  deletedConsultations: number;
+  deletedLocations: number;
+  resetUsers: number;
+  resetAdSense: boolean;
+  clearedLocalKeys: string[];
+  message: string;
+}
+
+/**
+ * Purges all test payment records from Firestore collection 'payments'
+ */
+export const clearTestingPaymentsFromFirestore = async (): Promise<number> => {
+  let count = 0;
+  try {
+    if (isConfigValid) {
+      const snap = await getDocs(collection(db, 'payments'));
+      for (const docSnap of snap.docs) {
+        await deleteDoc(doc(db, 'payments', docSnap.id)).catch(() => {});
+        count++;
+      }
+    }
+  } catch (err) {
+    console.warn('Notice while clearing payments:', err);
+  }
+  return count;
+};
+
+/**
+ * Purges all test audit reports from Firestore collection 'audit_reports'
+ */
+export const clearTestingAuditReportsFromFirestore = async (): Promise<number> => {
+  let count = 0;
+  try {
+    if (isConfigValid) {
+      const snap = await getDocs(collection(db, 'audit_reports'));
+      for (const docSnap of snap.docs) {
+        await deleteDoc(doc(db, 'audit_reports', docSnap.id)).catch(() => {});
+        count++;
+      }
+    }
+  } catch (err) {
+    console.warn('Notice while clearing audit reports:', err);
+  }
+  return count;
+};
+
+/**
+ * Purges all test consultation messages from Firestore collection 'consultations'
+ */
+export const clearTestingConsultationsFromFirestore = async (): Promise<number> => {
+  let count = 0;
+  try {
+    if (isConfigValid) {
+      const snap = await getDocs(collection(db, 'consultations'));
+      for (const docSnap of snap.docs) {
+        await deleteDoc(doc(db, 'consultations', docSnap.id)).catch(() => {});
+        count++;
+      }
+    }
+  } catch (err) {
+    console.warn('Notice while clearing consultations:', err);
+  }
+  return count;
+};
+
+/**
+ * Purges all test user locations from Firestore collection 'user_locations'
+ */
+export const clearTestingUserLocationsFromFirestore = async (): Promise<number> => {
+  let count = 0;
+  try {
+    if (isConfigValid) {
+      const snap = await getDocs(collection(db, 'user_locations'));
+      for (const docSnap of snap.docs) {
+        await deleteDoc(doc(db, 'user_locations', docSnap.id)).catch(() => {});
+        count++;
+      }
+    }
+  } catch (err) {
+    console.warn('Notice while clearing user locations:', err);
+  }
+  return count;
+};
+
+/**
+ * Resets AdSense daily metrics in Firestore collection 'adsense_reports'
+ */
+export const resetAdSenseTestingMetricsFromFirestore = async (): Promise<boolean> => {
+  try {
+    if (isConfigValid) {
+      const snap = await getDocs(collection(db, 'adsense_reports'));
+      for (const docSnap of snap.docs) {
+        await deleteDoc(doc(db, 'adsense_reports', docSnap.id)).catch(() => {});
+      }
+    }
+    // Clear local storage metrics
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('vastu_adsense_metrics_')) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch {}
+    return true;
+  } catch (err) {
+    console.warn('Notice resetting AdSense metrics:', err);
+    return false;
+  }
+};
+
+/**
+ * Resets non-admin user memberships (clears test Pro memberships / mock passes)
+ */
+export const resetTestingUserMembershipsFromFirestore = async (): Promise<number> => {
+  let count = 0;
+  try {
+    if (isConfigValid) {
+      const snap = await getDocs(collection(db, 'users'));
+      for (const docSnap of snap.docs) {
+        const data = docSnap.data();
+        if (!isAdminEmail(data.email)) {
+          await updateDoc(doc(db, 'users', docSnap.id), {
+            isProMember: false,
+            activePlan: null,
+            savedPropertiesCount: 0,
+            properties: [],
+          }).catch(() => {});
+          count++;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Notice resetting user profiles:', err);
+  }
+  return count;
+};
+
+/**
+ * Performs a comprehensive Backend Data Reset: clears all testing data from
+ * Firestore (payments, reports, consultations, locations, adsense) and clears
+ * client testing cache.
+ */
+export const clearAllTestingDataFromFirestore = async (): Promise<ResetDataResult> => {
+  const deletedPayments = await clearTestingPaymentsFromFirestore();
+  const deletedReports = await clearTestingAuditReportsFromFirestore();
+  const deletedConsultations = await clearTestingConsultationsFromFirestore();
+  const deletedLocations = await clearTestingUserLocationsFromFirestore();
+  const resetAdSense = await resetAdSenseTestingMetricsFromFirestore();
+  const resetUsers = await resetTestingUserMembershipsFromFirestore();
+
+  // Clear local storage testing caches
+  const clearedLocalKeys: string[] = [];
+  try {
+    const testKeys = [
+      'vastu_user_location_history',
+      'vastudrishti_user_location',
+      'vastu_unlocked_properties',
+      'vastu_pro_purchased_status',
+      'vastu_cached_reports',
+      'vastu_consultation_threads',
+      'vastu_geotag_records_v1',
+      'vastu_system_settings_admob_stats',
+    ];
+
+    testKeys.forEach((key) => {
+      if (localStorage.getItem(key) !== null) {
+        localStorage.removeItem(key);
+        clearedLocalKeys.push(key);
+      }
+    });
+
+    // Also remove any dynamic property/metrics keys
+    const dynamicKeysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('vastu_adsense_metrics_') || k.startsWith('vastu_user_properties_'))) {
+        dynamicKeysToRemove.push(k);
+      }
+    }
+    dynamicKeysToRemove.forEach((k) => {
+      localStorage.removeItem(k);
+      clearedLocalKeys.push(k);
+    });
+  } catch {}
+
+  // Dispatch event so UI instantly synchronizes
+  try {
+    window.dispatchEvent(new CustomEvent('vastu_backend_data_reset'));
+    window.dispatchEvent(new Event('vastu_config_updated'));
+  } catch {}
+
+  return {
+    success: true,
+    deletedPayments,
+    deletedReports,
+    deletedConsultations,
+    deletedLocations,
+    resetUsers,
+    resetAdSense,
+    clearedLocalKeys,
+    message: `Backend data reset completed: Cleared ${deletedPayments} payments, ${deletedReports} reports, ${deletedConsultations} consultations, ${deletedLocations} geotags, and reset ${resetUsers} user test profiles.`,
+  };
+};
+

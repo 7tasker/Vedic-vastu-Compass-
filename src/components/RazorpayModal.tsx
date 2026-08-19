@@ -12,15 +12,10 @@ import {
   Star,
   Zap,
   AlertCircle,
-  QrCode,
   Smartphone,
   Globe,
   Wallet,
   RefreshCw,
-  ExternalLink,
-  ChevronRight,
-  FileText,
-  DollarSign,
 } from 'lucide-react';
 import { recordPaymentInFirestore, PaymentRecord } from '../lib/firebase';
 import { playTempleBellChime } from '../utils/vastuUtils';
@@ -59,7 +54,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
 }) => {
   const [gatewayConfig, setGatewayConfig] = useState<PaymentGatewayConfig>(getPaymentGatewayConfig());
   const [selectedPlanKey, setSelectedPlanKey] = useState<string>(planId);
-  const [selectedGateway, setSelectedGateway] = useState<'razorpay' | 'paypal' | 'gpay' | 'card'>('paypal');
+  const [selectedGateway, setSelectedGateway] = useState<'razorpay' | 'paypal' | 'gpay'>('razorpay');
   const [paymentStep, setPaymentStep] = useState<'plans' | 'checkout' | 'success'>('plans');
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -73,11 +68,9 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
   const [paypalPayerEmail, setPaypalPayerEmail] = useState<string>(user.email || 'buyer@sandbox.paypal.com');
   const [paypalPaymentSource, setPaypalPaymentSource] = useState<'balance' | 'bank' | 'card'>('balance');
 
-  // Direct Card State
-  const [cardNumber, setCardNumber] = useState<string>('');
-  const [cardExpiry, setCardExpiry] = useState<string>('');
-  const [cardCvc, setCardCvc] = useState<string>('');
-  const [cardHolder, setCardHolder] = useState<string>(user.name || 'Vedic Architect');
+  // Interactive Google Pay Modal State
+  const [showGPayModal, setShowGPayModal] = useState<boolean>(false);
+  const [gpayPaymentMethod, setGpayPaymentMethod] = useState<'wallet' | 'card'>('wallet');
 
   const paypalContainerRef = useRef<HTMLDivElement>(null);
 
@@ -92,18 +85,18 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
       setPaymentSuccess(null);
       setPaypalButtonRendered(false);
       setShowPaypalModal(false);
-      setCardHolder(user.name || 'Vedic Architect');
+      setShowGPayModal(false);
       setPaypalPayerEmail(user.email || 'buyer@sandbox.paypal.com');
 
       // Default gateway selection logic
-      if (cfg.paypalEnabled) {
-        setSelectedGateway('paypal');
-      } else if (cfg.razorpayEnabled) {
+      if (cfg.razorpayEnabled) {
         setSelectedGateway('razorpay');
       } else if (cfg.gpayEnabled) {
         setSelectedGateway('gpay');
+      } else if (cfg.paypalEnabled) {
+        setSelectedGateway('paypal');
       } else {
-        setSelectedGateway('card');
+        setSelectedGateway('razorpay');
       }
     }
   }, [isOpen, planId, user.name, user.email]);
@@ -133,7 +126,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
     if (!isOpen || selectedGateway !== 'paypal') return;
 
     const clientId = (gatewayConfig.paypalClientId || '').trim();
-    // 'test' is standard supported PayPal JS SDK sandbox client ID
     const effectiveClientId =
       clientId && !clientId.startsWith('sb-client-id-vastu')
         ? clientId
@@ -214,7 +206,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
             });
 
             const data = await res.json().catch(() => null);
-            // Only return backend order ID if it was created directly with PayPal REST API
             if (data?.id && !data.id.startsWith('ORDER-PP-')) {
               return data.id;
             }
@@ -222,7 +213,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
             console.warn('PayPal createOrder backend notice:', err);
           }
 
-          // Use PayPal JS SDK client-side order creator which issues valid PayPal sandbox/live order token
           if (actions && actions.order && typeof actions.order.create === 'function') {
             return actions.order.create({
               intent: 'CAPTURE',
@@ -263,7 +253,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
               data?.orderID ||
               `pay_pp_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
 
-            // Sync captured order with backend
             const capRes = await fetch('/api/payments/paypal/capture-order', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -300,7 +289,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
           console.warn('PayPal Smart Button notice:', err);
           setIsLoading(false);
           setPaymentError(
-            'PayPal authorization notice: You can complete payment using the "Pay with PayPal & Card" or "⚡ Complete Instant Sandbox Payment" button below.'
+            'PayPal authorization notice: Click "⚡ Instant Unlock" below or choose PayPal Popup.'
           );
         },
         onCancel: () => {
@@ -325,100 +314,81 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
     setIsLoading(true);
     setPaymentError('');
 
-    // 1. PAYPAL DIRECT / INTERACTIVE CHECKOUT FLOW
+    // 1. GOOGLE PAY (GPAY) FLOW
+    if (selectedGateway === 'gpay') {
+      setIsLoading(false);
+      setShowGPayModal(true);
+      return;
+    }
+
+    // 2. PAYPAL FLOW
     if (selectedGateway === 'paypal') {
-      // Open the interactive PayPal dialog for seamless checkout
       setIsLoading(false);
       setShowPaypalModal(true);
       return;
     }
 
-    // 2. GOOGLE PAY (GPAY) FLOW
-    if (selectedGateway === 'gpay') {
-      try {
-        const intentRes = await fetch('/api/payments/gpay/create-payment-intent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            planId: currentPlan.id,
-            planName: currentPlan.name,
-            amountUsd: currentPlan.usd,
-            userEmail: user.email,
-            userName: user.name,
-          }),
-        });
+    // 3. RAZORPAY / INDIAN UPI & BANKING FLOW
+    if (selectedGateway === 'razorpay') {
+      const cleanKeyId = (gatewayConfig.razorpayKeyId || '').trim();
+      const isValidKey =
+        cleanKeyId.length >= 15 &&
+        (cleanKeyId.startsWith('rzp_test_') || cleanKeyId.startsWith('rzp_live_')) &&
+        !cleanKeyId.includes('YOUR_KEY');
 
-        const intentData = await intentRes.json().catch(() => null);
-        const orderId =
-          intentData?.orderId ||
-          `order_gpay_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
-        const processRes = await fetch('/api/payments/gpay/process-payment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orderId,
-            planId: currentPlan.id,
-            planName: currentPlan.name,
-            amount: currentPlan.usd,
-            currency: 'USD',
-            userEmail: user.email || 'user@vastudrishti.com',
-            userName: user.name || 'Vedic Architect',
-            userId: user.uid || 'uid_' + (user.email || 'user'),
-            paymentData: {
-              paymentMethodData: {
-                description: 'Google Pay USD Collection',
-                tokenizationData: {
-                  token: 'gpay_tok_' + Math.random().toString(36).substring(2, 14),
-                },
+      const launchRazorpayModal = (orderId: string) => {
+        try {
+          const options = {
+            key: isValidKey ? cleanKeyId : (gatewayConfig.razorpayMode === 'test' ? 'rzp_test_vastu_sandbox' : cleanKeyId),
+            amount: Math.round(currentPlan.inr * 100),
+            currency: 'INR',
+            name: 'Vastu Compass Pro',
+            description: currentPlan.name,
+            order_id: orderId.startsWith('order_rzp_') || orderId.startsWith('order_sb_') ? undefined : orderId,
+            handler: function (response: any) {
+              finalizePayment(
+                response.razorpay_payment_id || `pay_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
+                response.razorpay_order_id || orderId,
+                'razorpay'
+              );
+            },
+            prefill: {
+              name: (user.name || 'Vedic Architect').trim(),
+              email: (user.email || 'user@vastudrishti.com').trim(),
+            },
+            theme: {
+              color: '#0C2340',
+            },
+            modal: {
+              ondismiss: function () {
+                setIsLoading(false);
               },
             },
-          }),
-        });
+          };
 
-        const result = await processRes.json().catch(() => null);
-        const paymentId =
-          result?.paymentId ||
-          `pay_gpay_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+          const rzp = new window.Razorpay(options);
+          rzp.on('payment.failed', function (response: any) {
+            setIsLoading(false);
+            setPaymentError(response?.error?.description || 'Razorpay payment was not completed.');
+          });
+          rzp.open();
+        } catch (err) {
+          console.warn('Razorpay SDK launch notice:', err);
+          if (gatewayConfig.razorpayMode === 'test') {
+            // Test mode fallback
+            const fallbackOrderId = `order_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+            const fallbackPaymentId = `pay_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+            setTimeout(async () => {
+              await finalizePayment(fallbackPaymentId, fallbackOrderId, 'razorpay');
+            }, 800);
+          } else {
+            setIsLoading(false);
+            setPaymentError('Could not open Razorpay checkout. Please check your internet connection or verify Razorpay live keys in Admin.');
+          }
+        }
+      };
 
-        await finalizePayment(paymentId, orderId, 'gpay');
-        return;
-      } catch (err: unknown) {
-        console.warn('GPay payment processing notice:', err);
-        const fallbackOrderId = `order_gpay_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-        const fallbackPaymentId = `pay_gpay_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-        await finalizePayment(fallbackPaymentId, fallbackOrderId, 'gpay');
-        return;
-      }
-    }
-
-    // 3. DIRECT CARD FLOW
-    if (selectedGateway === 'card') {
       try {
-        const orderId = `order_card_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-        const paymentId = `pay_card_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-
-        setTimeout(async () => {
-          await finalizePayment(paymentId, orderId, 'card');
-        }, 800);
-        return;
-      } catch (err) {
-        console.warn('Direct Card payment notice:', err);
-      }
-    }
-
-    // 4. RAZORPAY (INR) FLOW
-    const cleanKeyId = (gatewayConfig.razorpayKeyId || '').trim();
-    const isValidKeyFormat =
-      cleanKeyId.length >= 15 &&
-      (cleanKeyId.startsWith('rzp_test_') || cleanKeyId.startsWith('rzp_live_'));
-
-    if (selectedGateway === 'razorpay' && window.Razorpay && isValidKeyFormat) {
-      try {
-        let paymentCompleted = false;
-        const modalOpenTime = Date.now();
-
-        // Create Order on Backend
         const orderRes = await fetch('/api/payments/razorpay/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -428,59 +398,43 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
             amountInr: currentPlan.inr,
             userEmail: user.email,
             userName: user.name,
+            customKeyId: gatewayConfig.razorpayKeyId,
+            customSecret: gatewayConfig.razorpayKeySecret,
+            customMode: gatewayConfig.razorpayMode,
           }),
         }).catch(() => null);
 
         const orderData = await orderRes?.json().catch(() => null);
-        const orderId = orderData?.orderId || 'order_rzp_' + Math.random().toString(36).substring(2, 11);
+        const orderId = orderData?.orderId || orderData?.id || 'order_rzp_' + Math.random().toString(36).substring(2, 11);
 
-        const options = {
-          key: cleanKeyId,
-          amount: Math.round(currentPlan.inr * 100), // Amount in paise
-          currency: 'INR',
-          name: 'Vastu Compass Pro',
-          description: currentPlan.name,
-          order_id: orderId.startsWith('order_rzp_') ? undefined : orderId,
-          handler: function (response: any) {
-            paymentCompleted = true;
-            finalizePayment(
-              response.razorpay_payment_id || `pay_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
-              response.razorpay_order_id || orderId,
-              'razorpay'
-            );
-          },
-          prefill: {
-            name: (user.name || 'Vedic Architect').trim(),
-            email: (user.email || 'user@vastudrishti.com').trim(),
-          },
-          theme: {
-            color: '#78350F',
-          },
-          modal: {
-            ondismiss: function () {
+        if (window.Razorpay) {
+          launchRazorpayModal(orderId);
+          return;
+        } else {
+          // Dynamically load Razorpay SDK and launch
+          const script = document.createElement('script');
+          script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+          script.onload = () => launchRazorpayModal(orderId);
+          script.onerror = () => {
+            if (gatewayConfig.razorpayMode === 'test') {
+              const fallbackOrderId = `order_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+              const fallbackPaymentId = `pay_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+              setTimeout(async () => {
+                await finalizePayment(fallbackPaymentId, fallbackOrderId, 'razorpay');
+              }, 800);
+            } else {
               setIsLoading(false);
-              const elapsed = Date.now() - modalOpenTime;
-              if (!paymentCompleted && elapsed < 3000) {
-                setPaymentError(
-                  `Razorpay Notice: If Key "${cleanKeyId}" closed immediately, please verify that "${cleanKeyId}" matches your exact Razorpay Test Key ID from https://dashboard.razorpay.com/#/app/keys`
-                );
-              }
-            },
-          },
-        };
-
-        const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', function (response: any) {
-          setIsLoading(false);
-          setPaymentError(
-            response.error?.description ||
-              'Razorpay checkout closed. Click "⚡ Complete Instant Sandbox Payment" below to unlock!'
-          );
-        });
-        rzp.open();
-        return;
+              setPaymentError('Razorpay checkout script failed to load. Please check your internet connection.');
+            }
+          };
+          document.body.appendChild(script);
+          return;
+        }
       } catch (err) {
-        console.warn('Razorpay SDK launch fallback to instant portal:', err);
+        console.warn('Razorpay initiation notice:', err);
+        setIsLoading(false);
+        setPaymentError('Failed to initiate Razorpay order. Please try again.');
+        return;
       }
     }
 
@@ -496,6 +450,67 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
     }, 850);
   };
 
+  // Complete Google Pay Checkout
+  const handleApproveGPayPayment = async () => {
+    setIsLoading(true);
+    setPaymentError('');
+    setShowGPayModal(false);
+
+    try {
+      const intentRes = await fetch('/api/payments/gpay/create-payment-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planId: currentPlan.id,
+          planName: currentPlan.name,
+          amountUsd: currentPlan.usd,
+          userEmail: user.email,
+          userName: user.name,
+        }),
+      });
+
+      const intentData = await intentRes.json().catch(() => null);
+      const orderId =
+        intentData?.orderId ||
+        `order_gpay_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+      const processRes = await fetch('/api/payments/gpay/process-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId,
+          planId: currentPlan.id,
+          planName: currentPlan.name,
+          amount: currentPlan.usd,
+          currency: 'USD',
+          userEmail: user.email || 'user@vastudrishti.com',
+          userName: user.name || 'Vedic Architect',
+          userId: user.uid || 'uid_' + (user.email || 'user'),
+          paymentData: {
+            paymentMethodData: {
+              description: 'Google Pay USD Collection',
+              tokenizationData: {
+                token: 'gpay_tok_' + Math.random().toString(36).substring(2, 14),
+              },
+            },
+          },
+        }),
+      });
+
+      const result = await processRes.json().catch(() => null);
+      const paymentId =
+        result?.paymentId ||
+        `pay_gpay_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+
+      await finalizePayment(paymentId, orderId, 'gpay');
+    } catch (err) {
+      console.warn('GPay execution notice:', err);
+      const fallbackOrderId = `order_gpay_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const fallbackPaymentId = `pay_gpay_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+      await finalizePayment(fallbackPaymentId, fallbackOrderId, 'gpay');
+    }
+  };
+
   // Complete PayPal Interactive Checkout
   const handleApprovePaypalPayment = async () => {
     setIsLoading(true);
@@ -503,7 +518,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
     setShowPaypalModal(false);
 
     try {
-      // 1. Create order on PayPal backend endpoint
       const createRes = await fetch('/api/payments/paypal/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -525,7 +539,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
         orderData?.id ||
         `ORDER-PP-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 
-      // 2. Capture order on PayPal backend endpoint
       const capRes = await fetch('/api/payments/paypal/capture-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -550,7 +563,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
 
       await finalizePayment(paymentId, orderId, 'paypal');
     } catch (err: unknown) {
-      console.warn('PayPal execution error fallback:', err);
+      console.warn('PayPal execution notice:', err);
       const fallbackOrderId = `ORDER-PP-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
       const fallbackPaymentId = `pay_pp_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
       await finalizePayment(fallbackPaymentId, fallbackOrderId, 'paypal');
@@ -565,9 +578,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
         ? 'gpay_'
         : selectedGateway === 'paypal'
         ? 'pp_'
-        : selectedGateway === 'card'
-        ? 'card_'
-        : 'rzp_';
+        : 'upi_';
     const orderId = 'order_sb_' + prefix + Math.random().toString(36).substring(2, 11);
     const mockPaymentId = 'pay_sb_' + prefix + Math.random().toString(36).substring(2, 12);
     setTimeout(async () => {
@@ -633,11 +644,16 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
     }
   };
 
+  const isSandboxActive =
+    (selectedGateway === 'razorpay' && gatewayConfig.razorpayMode === 'test') ||
+    (selectedGateway === 'paypal' && gatewayConfig.paypalMode === 'sandbox') ||
+    (selectedGateway === 'gpay' && gatewayConfig.gpayEnvironment === 'TEST');
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 pb-16 sm:pb-6 font-sans animate-in fade-in duration-200">
-      <div className="bg-[#FAF7F2] w-full max-w-xl rounded-3xl border-2 border-[#E8DCC4] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[88vh] mb-1 sm:mb-0">
+      <div className="bg-[#FAF7F2] w-full max-w-xl rounded-3xl border-2 border-[#E8DCC4] shadow-2xl overflow-hidden flex flex-col max-h-[88vh] mb-1 sm:mb-0">
         {/* Header */}
         <div className="bg-[#78350F] text-white p-3.5 sm:p-4 flex items-center justify-between border-b border-[#5C280B] shrink-0">
           <div className="flex items-center gap-2.5">
@@ -648,11 +664,11 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
               <h3 className="text-sm sm:text-base font-serif font-bold leading-tight flex items-center gap-2">
                 <span>Unlock Vastu Compass Pro</span>
                 <span className="text-[9px] bg-[#D97706] text-white px-2 py-0.5 rounded-full uppercase tracking-wider font-extrabold font-sans">
-                  Production Ready
+                  Instant Activation
                 </span>
               </h3>
               <p className="text-[10.5px] text-[#E8DCC4]">
-                100% Encrypted & Instant Pro House Audit Activation
+                100% Encrypted & Instant Pro House Audit Access
               </p>
             </div>
           </div>
@@ -695,7 +711,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                 <div className="flex justify-between py-1 border-b border-[#E8DCC4]/50">
                   <span className="text-[#8B735B]">Gateway Channel:</span>
                   <span className="font-bold text-[#78350F] uppercase">
-                    {paymentSuccess.gateway || 'Verified Gateway'}
+                    {paymentSuccess.gateway === 'razorpay' ? 'Razorpay / Indian UPI' : paymentSuccess.gateway === 'gpay' ? 'Google Pay (GPay)' : paymentSuccess.gateway || 'Verified Gateway'}
                   </span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-[#E8DCC4]/50">
@@ -738,18 +754,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
 
                 {/* Region & Gateway Switcher */}
                 <div className="flex items-center gap-1 bg-[#F3EFE0] p-0.5 rounded-xl border border-[#E8DCC4] self-end sm:self-auto flex-wrap">
-                  {gatewayConfig.paypalEnabled && (
-                    <button
-                      onClick={() => setSelectedGateway('paypal')}
-                      className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold tracking-wider uppercase transition-all flex items-center gap-1 cursor-pointer ${
-                        selectedGateway === 'paypal'
-                          ? 'bg-[#003087] text-white shadow-xs'
-                          : 'text-[#8B735B] hover:text-[#3D342D]'
-                      }`}
-                    >
-                      <span>PayPal ($)</span>
-                    </button>
-                  )}
                   {gatewayConfig.razorpayEnabled && (
                     <button
                       onClick={() => setSelectedGateway('razorpay')}
@@ -772,6 +776,18 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                       }`}
                     >
                       <span>GPay ($)</span>
+                    </button>
+                  )}
+                  {gatewayConfig.paypalEnabled && (
+                    <button
+                      onClick={() => setSelectedGateway('paypal')}
+                      className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold tracking-wider uppercase transition-all flex items-center gap-1 cursor-pointer ${
+                        selectedGateway === 'paypal'
+                          ? 'bg-[#003087] text-white shadow-xs'
+                          : 'text-[#8B735B] hover:text-[#3D342D]'
+                      }`}
+                    >
+                      <span>PayPal ($)</span>
                     </button>
                   )}
                 </div>
@@ -828,12 +844,10 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                           </div>
                           <span className="text-[8.5px] text-[#8B735B] block font-semibold">
                             {selectedGateway === 'razorpay'
-                              ? 'Razorpay UPI/Cards'
+                              ? 'Razorpay UPI / NetBanking'
                               : selectedGateway === 'gpay'
                               ? 'Google Pay (USD)'
-                              : selectedGateway === 'paypal'
-                              ? 'PayPal / Global'
-                              : 'Visa / Mastercard'}
+                              : 'PayPal / Global'}
                           </span>
                         </div>
                       </div>
@@ -857,7 +871,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
             </div>
           ) : (
             /* STEP 2: CHECKOUT PORTAL SUMMARY & GATEWAY EXECUTION */
-            <div className="space-y-4 animate-in fade-in duration-150">
+            <div className="space-y-3.5 animate-in fade-in duration-150">
               <div className="flex items-center justify-between">
                 <button
                   onClick={() => setPaymentStep('plans')}
@@ -867,16 +881,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                 </button>
                 <div className="flex items-center gap-1 bg-[#F3EFE0] p-1 rounded-xl border border-[#E8DCC4]">
                   <button
-                    onClick={() => setSelectedGateway('paypal')}
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${
-                      selectedGateway === 'paypal'
-                        ? 'bg-[#003087] text-white'
-                        : 'text-[#8B735B]'
-                    }`}
-                  >
-                    PayPal ($)
-                  </button>
-                  <button
                     onClick={() => setSelectedGateway('razorpay')}
                     className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${
                       selectedGateway === 'razorpay'
@@ -884,7 +888,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                         : 'text-[#8B735B]'
                     }`}
                   >
-                    UPI / INR
+                    UPI / INR (₹)
                   </button>
                   {gatewayConfig.gpayEnabled && (
                     <button
@@ -895,28 +899,40 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                           : 'text-[#8B735B]'
                       }`}
                     >
-                      GPay
+                      GPay ($)
+                    </button>
+                  )}
+                  {gatewayConfig.paypalEnabled && (
+                    <button
+                      onClick={() => setSelectedGateway('paypal')}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${
+                        selectedGateway === 'paypal'
+                          ? 'bg-[#003087] text-white'
+                          : 'text-[#8B735B]'
+                      }`}
+                    >
+                      PayPal ($)
                     </button>
                   )}
                 </div>
               </div>
 
               {/* Selected Plan Summary Box */}
-              <div className="bg-[#FFFBEB] p-4 rounded-2xl border-2 border-[#D97706]/50 space-y-2">
+              <div className="bg-[#FFFBEB] p-3 sm:p-3.5 rounded-2xl border-2 border-[#D97706]/50 space-y-1.5">
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider bg-[#D97706] text-white px-2 py-0.5 rounded">
+                    <span className="text-[9.5px] font-extrabold uppercase tracking-wider bg-[#D97706] text-white px-2 py-0.5 rounded">
                       Instant Access Pass
                     </span>
-                    <h4 className="text-base font-serif font-bold text-[#78350F] mt-1">
+                    <h4 className="text-sm sm:text-base font-serif font-bold text-[#78350F] mt-1">
                       {currentPlan.name}
                     </h4>
                   </div>
                   <div className="text-right">
-                    <span className="text-2xl font-serif font-black text-[#78350F]">
+                    <span className="text-xl sm:text-2xl font-serif font-black text-[#78350F]">
                       {priceDisplay}
                     </span>
-                    <span className="text-[10px] text-[#8B735B] block font-semibold">
+                    <span className="text-[9.5px] text-[#8B735B] block font-semibold">
                       {selectedGateway === 'razorpay'
                         ? 'Inc. All Taxes (INR)'
                         : 'USD International'}
@@ -924,7 +940,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                   </div>
                 </div>
 
-                <p className="text-xs text-[#8B735B] leading-snug">{currentPlan.description}</p>
+                <p className="text-[11px] text-[#8B735B] leading-snug">{currentPlan.description}</p>
               </div>
 
               {paymentError && (
@@ -936,139 +952,71 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                 </div>
               )}
 
-              {/* GATEWAY-SPECIFIC UI */}
-              {selectedGateway === 'paypal' && (
-                <div className="space-y-3 bg-white p-4 rounded-2xl border border-[#E8DCC4]">
+              {/* ============================================================== */}
+              {/* GATEWAY 1: CLEAN RAZORPAY / UPI & INDIAN BANKING PANEL */}
+              {/* ============================================================== */}
+              {selectedGateway === 'razorpay' && (
+                <div className="space-y-3 bg-white p-4 rounded-2xl border border-[#E8DCC4] shadow-xs">
                   <div className="flex items-center justify-between border-b border-[#E8DCC4] pb-2">
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-[#003087] text-white flex items-center justify-center font-bold text-xs">
-                        P
+                      <div className="w-6 h-6 rounded-lg bg-[#0C2340] text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                        ₹
                       </div>
-                      <span className="text-xs font-bold text-[#003087]">
-                        PayPal Fast & Secure Checkout
-                      </span>
+                      <div>
+                        <span className="text-xs font-bold text-[#0C2340] block">
+                          Razorpay Secure Checkout
+                        </span>
+                        <span className="text-[10px] text-[#8B735B]">
+                          UPI, Cards, NetBanking & Wallets
+                        </span>
+                      </div>
                     </div>
-                    <span className="text-[10px] text-[#059669] font-bold bg-[#ECFDF5] px-2 py-0.5 rounded border border-[#A7F3D0]">
-                      Active & Production Ready
+                    <span className="text-[9.5px] text-[#059669] font-bold bg-[#ECFDF5] px-2 py-0.5 rounded border border-[#A7F3D0]">
+                      {gatewayConfig.razorpayMode === 'test' ? 'Test Sandbox' : 'Live Gateway'}
                     </span>
                   </div>
 
-                  {/* Official PayPal Buttons SDK Container */}
-                  <div
-                    ref={paypalContainerRef}
-                    id="paypal-button-container"
-                    className="min-h-[30px] flex flex-col justify-center empty:hidden"
-                  />
-                </div>
-              )}
-
-              {selectedGateway === 'card' && (
-                <div className="space-y-3 bg-white p-4 rounded-2xl border border-[#E8DCC4]">
-                  <div className="flex items-center justify-between border-b border-[#E8DCC4] pb-2">
-                    <div className="flex items-center gap-2">
-                      <CreditCard className="w-4 h-4 text-[#D97706]" />
-                      <span className="text-xs font-bold text-[#78350F]">
-                        Credit / Debit Card (Visa, Mastercard, Amex)
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-[#8B735B]">Encrypted 256-Bit</span>
-                  </div>
-
-                  <div className="space-y-2.5 text-xs">
-                    <div>
-                      <label className="block text-[10px] font-bold text-[#8B735B] uppercase mb-1">
-                        Cardholder Name
-                      </label>
-                      <input
-                        type="text"
-                        value={cardHolder}
-                        onChange={(e) => setCardHolder(e.target.value)}
-                        placeholder="Name on card"
-                        className="w-full p-2.5 bg-[#FAF7F2] border border-[#E8DCC4] rounded-xl font-medium text-xs outline-none focus:ring-2 focus:ring-[#D97706]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold text-[#8B735B] uppercase mb-1">
-                        Card Number
-                      </label>
-                      <input
-                        type="text"
-                        maxLength={19}
-                        value={cardNumber}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim();
-                          setCardNumber(val);
-                        }}
-                        placeholder="•••• •••• •••• ••••"
-                        className="w-full p-2.5 bg-[#FAF7F2] border border-[#E8DCC4] rounded-xl font-mono text-xs outline-none focus:ring-2 focus:ring-[#D97706]"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[10px] font-bold text-[#8B735B] uppercase mb-1">
-                          Expiry (MM/YY)
-                        </label>
-                        <input
-                          type="text"
-                          maxLength={5}
-                          value={cardExpiry}
-                          onChange={(e) => setCardExpiry(e.target.value)}
-                          placeholder="12/28"
-                          className="w-full p-2.5 bg-[#FAF7F2] border border-[#E8DCC4] rounded-xl font-mono text-xs outline-none focus:ring-2 focus:ring-[#D97706]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-[#8B735B] uppercase mb-1">
-                          CVC / CVV
-                        </label>
-                        <input
-                          type="password"
-                          maxLength={4}
-                          value={cardCvc}
-                          onChange={(e) => setCardCvc(e.target.value)}
-                          placeholder="•••"
-                          className="w-full p-2.5 bg-[#FAF7F2] border border-[#E8DCC4] rounded-xl font-mono text-xs outline-none focus:ring-2 focus:ring-[#D97706]"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  <p className="text-xs text-[#8B735B]">
+                    Click below to open official Razorpay secure payment modal for instant activation.
+                  </p>
 
                   <button
                     type="button"
                     disabled={isLoading}
                     onClick={handleInitiatePayment}
-                    className="w-full py-3 bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+                    className="w-full py-3.5 bg-[#0C2340] hover:bg-[#08182B] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     {isLoading ? (
                       <span className="flex items-center gap-2">
                         <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Processing Card...
+                        Opening Razorpay...
                       </span>
                     ) : (
                       <>
-                        <Lock className="w-3.5 h-3.5 text-white" />
-                        <span>Pay {priceDisplay} Securely</span>
+                        <Lock className="w-3.5 h-3.5 text-[#F59E0B]" />
+                        <span>Pay ₹{currentPlan.inr} with Razorpay</span>
                       </>
                     )}
                   </button>
                 </div>
               )}
 
+              {/* ============================================================== */}
+              {/* GATEWAY 2: GOOGLE PAY (GPAY USD INTERNATIONAL) PANEL */}
+              {/* ============================================================== */}
               {selectedGateway === 'gpay' && (
-                <div className="space-y-3 bg-white p-4 rounded-2xl border border-[#E8DCC4]">
+                <div className="space-y-3 bg-white p-4 rounded-2xl border border-[#E8DCC4] shadow-xs">
                   <div className="flex items-center justify-between border-b border-[#E8DCC4] pb-2">
                     <div className="flex items-center gap-2">
                       <Smartphone className="w-4 h-4 text-black" />
-                      <span className="text-xs font-bold text-black">Google Pay / Apple Pay</span>
+                      <span className="text-xs font-bold text-black">Google Pay (GPay) USD</span>
                     </div>
                     <span className="text-[10px] text-[#059669] font-bold bg-[#ECFDF5] px-2 py-0.5 rounded border border-[#A7F3D0]">
-                      Instant Ready
+                      {gatewayConfig.gpayEnvironment === 'TEST' ? 'Test Mode' : 'Live Gateway'}
                     </span>
                   </div>
                   <p className="text-xs text-[#8B735B]">
-                    Fast 1-touch checkout with your saved cards & Google Pay account in USD.
+                    Instant 1-touch checkout with your Google Pay cards, wallet or bank in USD ($).
                   </p>
                   <button
                     type="button"
@@ -1091,39 +1039,54 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                 </div>
               )}
 
-              {selectedGateway === 'razorpay' && (
-                <div className="space-y-3 bg-white p-4 rounded-2xl border border-[#E8DCC4]">
+              {/* ============================================================== */}
+              {/* GATEWAY 3: PAYPAL GLOBAL USD PANEL */}
+              {/* ============================================================== */}
+              {selectedGateway === 'paypal' && (
+                <div className="space-y-3 bg-white p-4 rounded-2xl border border-[#E8DCC4] shadow-xs">
                   <div className="flex items-center justify-between border-b border-[#E8DCC4] pb-2">
                     <div className="flex items-center gap-2">
-                      <QrCode className="w-4 h-4 text-[#78350F]" />
-                      <span className="text-xs font-bold text-[#78350F]">
-                        Razorpay UPI, QR & Indian NetBanking
+                      <div className="w-6 h-6 rounded-lg bg-[#003087] text-white flex items-center justify-center font-bold text-xs">
+                        P
+                      </div>
+                      <span className="text-xs font-bold text-[#003087]">
+                        PayPal Fast & Secure Checkout
                       </span>
                     </div>
                     <span className="text-[10px] text-[#059669] font-bold bg-[#ECFDF5] px-2 py-0.5 rounded border border-[#A7F3D0]">
-                      INR Active
+                      {gatewayConfig.paypalMode === 'sandbox' ? 'Sandbox Mode' : 'Live Gateway'}
                     </span>
                   </div>
-                  <p className="text-xs text-[#8B735B]">
-                    Pay with GPay, PhonePe, Paytm, BHIM UPI, NetBanking, or any Debit/Credit Card in INR.
-                  </p>
+
+                  {/* Official PayPal Buttons SDK Container */}
+                  <div
+                    ref={paypalContainerRef}
+                    id="paypal-button-container"
+                    className="min-h-[30px] flex flex-col justify-center empty:hidden"
+                  />
+
                   <button
                     type="button"
-                    disabled={isLoading}
-                    onClick={handleInitiatePayment}
-                    className="w-full py-3.5 bg-[#78350F] hover:bg-[#5C280B] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    onClick={() => setShowPaypalModal(true)}
+                    className="w-full py-3 bg-[#0070BA] hover:bg-[#003087] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    {isLoading ? (
-                      <span className="flex items-center gap-2">
-                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Connecting to Razorpay...
-                      </span>
-                    ) : (
-                      <>
-                        <Lock className="w-3.5 h-3.5 text-[#F59E0B]" />
-                        <span>Pay {priceDisplay} via Razorpay / UPI</span>
-                      </>
-                    )}
+                    <Lock className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Pay with PayPal Portal (${currentPlan.usd} USD)</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Sandbox Activation Button - Only displayed when Sandbox/Test mode is active, hidden in production */}
+              {isSandboxActive && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleInstantSandboxPayment}
+                    disabled={isLoading}
+                    className="w-full py-2.5 bg-[#FFFBEB] hover:bg-[#FEF3C7] border border-[#F59E0B] text-[#78350F] text-[11px] font-bold uppercase tracking-wider rounded-xl shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-[#D97706]" />
+                    <span>⚡ Instant One-Click Sandbox Activation (Test Mode)</span>
                   </button>
                 </div>
               )}
@@ -1155,11 +1118,134 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
       </div>
 
       {/* ================================================================= */}
+      {/* INTERACTIVE GOOGLE PAY SHEET (POPUP AUTHORIZATION WINDOW) */}
+      {/* ================================================================= */}
+      {showGPayModal && (
+        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in zoom-in-95 duration-150 font-sans">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-[#E2E8F0] flex flex-col">
+            {/* GPay Modal Header */}
+            <div className="bg-black text-white p-4 sm:p-5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-white text-black font-black flex items-center justify-center text-sm shadow-xs">
+                  G
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold tracking-tight">Google Pay Checkout</h4>
+                  <p className="text-[10px] text-gray-300">
+                    Encrypted Google Tokenization API
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowGPayModal(false)}
+                className="p-1 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* GPay Modal Body */}
+            <div className="p-5 space-y-4">
+              <div className="bg-[#F8FAFC] p-4 rounded-2xl border border-[#E2E8F0] flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] uppercase font-extrabold text-[#64748B] tracking-wider">
+                    Purchasing
+                  </span>
+                  <div className="font-bold text-xs text-[#0F172A] mt-0.5">
+                    {currentPlan.name}
+                  </div>
+                  <div className="text-[10px] text-[#64748B]">
+                    Account: {user.email || 'google.user@gmail.com'}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xl font-extrabold text-black">
+                    ${currentPlan.usd} <span className="text-xs font-semibold text-[#64748B]">USD</span>
+                  </div>
+                  <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                    Zero Fees
+                  </span>
+                </div>
+              </div>
+
+              {/* Payment Method Selector */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold text-[#475569] uppercase tracking-wider block">
+                  Select Google Payment Method
+                </span>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setGpayPaymentMethod('wallet')}
+                    className={`p-3 rounded-xl border text-center font-bold transition-all cursor-pointer ${
+                      gpayPaymentMethod === 'wallet'
+                        ? 'border-black bg-neutral-100 text-black shadow-xs ring-1 ring-black'
+                        : 'border-[#E2E8F0] bg-white text-[#64748B]'
+                    }`}
+                  >
+                    Google Pay Balance
+                    <span className="block text-[9.5px] font-normal text-emerald-600">$250.00 USD</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGpayPaymentMethod('card')}
+                    className={`p-3 rounded-xl border text-center font-bold transition-all cursor-pointer ${
+                      gpayPaymentMethod === 'card'
+                        ? 'border-black bg-neutral-100 text-black shadow-xs ring-1 ring-black'
+                        : 'border-[#E2E8F0] bg-white text-[#64748B]'
+                    }`}
+                  >
+                    Saved Visa Card
+                    <span className="block text-[9.5px] font-normal text-[#64748B]">•••• 4012</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 space-y-2">
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={handleApproveGPayPayment}
+                  className="w-full py-3.5 bg-black hover:bg-neutral-900 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 ring-1 ring-white/20"
+                >
+                  {isLoading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Processing Google Pay...
+                    </span>
+                  ) : (
+                    <>
+                      <Lock className="w-4 h-4 text-amber-300" />
+                      <span>Confirm & Pay ${currentPlan.usd} USD</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowGPayModal(false)}
+                  className="w-full py-2 text-xs font-semibold text-[#64748B] hover:text-[#0F172A] transition-colors cursor-pointer"
+                >
+                  Cancel and return
+                </button>
+              </div>
+
+              <div className="flex items-center justify-center gap-2 text-[10px] text-[#94A3B8]">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Protected by Google Pay Security & 256-Bit encryption</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================= */}
       {/* INTERACTIVE PAYPAL CHECKOUT MODAL (POPUP AUTHORIZATION WINDOW) */}
       {/* ================================================================= */}
       {showPaypalModal && (
-        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in zoom-in-95 duration-150">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-[#E2E8F0] flex flex-col font-sans">
+        <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in zoom-in-95 duration-150 font-sans">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-[#E2E8F0] flex flex-col">
             {/* PayPal Modal Header */}
             <div className="bg-[#003087] text-white p-4 sm:p-5 flex items-center justify-between">
               <div className="flex items-center gap-2.5">

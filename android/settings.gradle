@@ -1,0 +1,10 @@
+include ':app'
+rootProject.name = "Vastu Compass"
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
