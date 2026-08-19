@@ -320,11 +320,15 @@ export const getRedirectResult = async (authInstance: Auth) => {
 };
 
 export const signOut = async (authInstance: Auth) => {
-  if (!isConfigValid) {
-    notifyLocalAuthListeners(null);
-    return;
+  notifyLocalAuthListeners(null);
+  try {
+    localStorage.removeItem('vastu_local_user');
+    localStorage.removeItem('vastu_active_user_profile');
+    localStorage.removeItem('vastudrishti_audit_unlocked');
+  } catch {}
+  if (isConfigValid) {
+    return fbSignOut(authInstance);
   }
-  return fbSignOut(authInstance);
 };
 
 // Firestore Error Handler helper

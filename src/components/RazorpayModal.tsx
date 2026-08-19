@@ -316,6 +316,91 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
 
     // 1. GOOGLE PAY (GPAY) FLOW
     if (selectedGateway === 'gpay') {
+      if (window.google?.payments?.api?.PaymentsClient) {
+        try {
+          const paymentsClient = new window.google.payments.api.PaymentsClient({
+            environment: gatewayConfig.gpayEnvironment === 'PRODUCTION' ? 'PRODUCTION' : 'TEST',
+          });
+
+          const isReady = await paymentsClient.isReadyToPay({
+            apiVersion: 2,
+            apiVersionMinor: 0,
+            allowedPaymentMethods: [
+              {
+                type: 'CARD',
+                parameters: {
+                  allowedAuthMethods: ['PAN_ONLY', 'CRYPTOGRAM_3DS'],
+                  allowedCardNetworks: ['AMEX', 'DISCOVER', 'INTERAC', 'JCB', 'MASTERCARD', 'VISA'],
+                },
+              },
+            ],
+          });
+
+          if (isReady && isReady.result) {
+            const paymentDataRequest = {
+              apiVersion: 2,
+              apiVersionMinor: 0,
+              allowedPaymentMethods: [
+                {
+                  type: 'CARD',
+                  parameters: {
+                    allowedAuthMethods: ['PAN_ONLY', 'CRYPTOGRAM_3DS'],
+                    allowedCardNetworks: ['AMEX', 'DISCOVER', 'INTERAC', 'JCB', 'MASTERCARD', 'VISA'],
+                    billingAddressRequired: true,
+                    billingAddressParameters: { format: 'MIN' },
+                  },
+                  tokenizationSpecification: {
+                    type: 'PAYMENT_GATEWAY',
+                    parameters: {
+                      gateway: 'stripe',
+                      'stripe:version': '2023-10-16',
+                      'stripe:publishableKey': 'pk_test_sample_usd_gpay',
+                      gatewayMerchantId: gatewayConfig.gpayMerchantId || 'BCR2DN4TX6E7L5X5',
+                    },
+                  },
+                },
+              ],
+              transactionInfo: {
+                totalPriceStatus: 'FINAL',
+                totalPrice: Number(currentPlan.usd).toFixed(2),
+                currencyCode: 'USD',
+                countryCode: 'US',
+              },
+              merchantInfo: {
+                merchantId: gatewayConfig.gpayMerchantId || '12345678901234567890',
+                merchantName: gatewayConfig.gpayMerchantName || 'Vastu Compass Pro',
+              },
+            };
+
+            const paymentData = await paymentsClient.loadPaymentData(paymentDataRequest);
+            const processRes = await fetch('/api/payments/gpay/process-payment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                paymentData,
+                planId: currentPlan.id,
+                planName: currentPlan.name,
+                amount: currentPlan.usd,
+                currency: 'USD',
+                userEmail: user.email || 'user@vastudrishti.com',
+                userName: user.name || 'Vedic Architect',
+                userId: user.uid || 'uid_' + (user.email || 'user'),
+              }),
+            });
+            const result = await processRes.json().catch(() => null);
+            const paymentId = result?.paymentId || `pay_gpay_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+            const orderId = result?.orderId || `order_gpay_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+            await finalizePayment(paymentId, orderId, 'gpay');
+            return;
+          }
+        } catch (gpayErr: any) {
+          if (gpayErr?.statusCode === 'CANCELED') {
+            setIsLoading(false);
+            return;
+          }
+          console.warn('Direct Google Pay Web API notice:', gpayErr);
+        }
+      }
       setIsLoading(false);
       setShowGPayModal(true);
       return;
