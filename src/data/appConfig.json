@@ -1,0 +1,49 @@
+{
+  "appName": "Vedic Vastu Compass & House Auditor",
+  "version": "3.2.5",
+  "buildDate": "2026-08-12",
+  "sensors": {
+    "feedbackEngine": "Magnetometer & Device Orientation",
+    "permissionType": "geolocation",
+    "calibrationMode": "Manual Degree Offset (-180° to +180°) & Current GPS Location Alignment",
+    "liveDegreeUpdateIntervalMs": 100,
+    "vibrationFeedbackOnZoneChange": true
+  },
+  "popupOverlays": {
+    "fullscreenMandalaVisualizer": {
+      "type": "overlay_modal",
+      "features": ["3x3 Mandala Grid", "Floorplan Image Alignment", "Zone Inspection Drawer"],
+      "dismissible": true
+    },
+    "zoneInfoCard": {
+      "type": "side_panel_card",
+      "fields": ["Ruling Deity", "Body Limb", "Ideal Room Usage", "Elemental Pancha Tattva"]
+    },
+    "compassCalibrationModal": {
+      "type": "tabbed_dialog",
+      "tabs": ["quick", "fine", "location", "guide"]
+    },
+    "propertyManagerModal": {
+      "type": "dialog",
+      "features": ["Property Creation", "Floorplan Upload", "Active Property Switcher"]
+    },
+    "appInfoAndPrivacyModal": {
+      "type": "tabbed_dialog",
+      "tabs": ["privacy", "app_info"]
+    }
+  },
+  "screenSizing": {
+    "responsiveLayout": "Desktop-First & Mobile Landscape/Portrait Adaptive",
+    "maxContainerWidth": "1024px (5xl)",
+    "landscapeOrientation": {
+      "mode": "Horizontal Side-by-Side Split",
+      "mandalaCanvasSizing": "min(calc(100vh-150px), calc(50vw-24px))",
+      "infoPanelWidth": "320px"
+    },
+    "portraitOrientation": {
+      "mode": "Stacked Vertical Scroll",
+      "zonePopup": "Top Floating Banner"
+    },
+    "touchTargetMinSize": "36px (Finger-Touch Friendly)"
+  }
+}

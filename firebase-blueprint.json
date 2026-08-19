@@ -1,0 +1,192 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile in VastuDrishti",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string" },
+        "isProMember": { "type": "boolean" },
+        "activePlan": { "type": "string" },
+        "savedPropertiesCount": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "lastLoginAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "AuditReport": {
+      "title": "AuditReport",
+      "description": "Comprehensive Vedic Vastu audit report record with 16-zone scores and dosha remedies",
+      "type": "object",
+      "properties": {
+        "reportRefNumber": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "propertyName": { "type": "string" },
+        "propertyType": { "type": "string" },
+        "facingDirection": { "type": "string" },
+        "overallScore": { "type": "number" },
+        "grade": { "type": "string" },
+        "summaryText": { "type": "string" },
+        "doshCount": { "type": "number" },
+        "remedyCount": { "type": "number" },
+        "totalRooms": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["reportRefNumber", "overallScore", "grade"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment transactions record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "status": { "type": "string" },
+        "razorpayPaymentId": { "type": "string" },
+        "razorpayOrderId": { "type": "string" },
+        "planId": { "type": "string" },
+        "planName": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "amount", "status"]
+    },
+    "AdSenseReport": {
+      "title": "AdSenseReport",
+      "description": "Daily AdSense performance tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "impressions": { "type": "number" },
+        "clicks": { "type": "number" },
+        "ctr": { "type": "number" },
+        "ecpm": { "type": "number" },
+        "revenue": { "type": "number" },
+        "activeAdUnits": { "type": "number" },
+        "publisherId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "VastuKnowledgeRule": {
+      "title": "VastuKnowledgeRule",
+      "description": "Offline Vastu Shastra rule knowledge base for zero-API instant lookup",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string" },
+        "title": { "type": "string" },
+        "direction": { "type": "string" },
+        "roomType": { "type": "string" },
+        "element": { "type": "string" },
+        "shastraReference": { "type": "string" },
+        "guideline": { "type": "string" },
+        "impact": { "type": "string" },
+        "remedy": { "type": "string" },
+        "isCompactIncluded": { "type": "boolean" },
+        "lastUpdated": { "type": "string" }
+      },
+      "required": ["id", "title", "guideline"]
+    },
+    "Consultation": {
+      "title": "Consultation",
+      "description": "User consultation forum inquiries and admin responses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "phone": { "type": "string" },
+        "propertyType": { "type": "string" },
+        "facingDirection": { "type": "string" },
+        "topic": { "type": "string" },
+        "question": { "type": "string" },
+        "status": { "type": "string" },
+        "adminReply": { "type": "string" },
+        "repliedAt": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userName", "userEmail", "question"]
+    },
+    "PushNotificationCampaign": {
+      "title": "PushNotificationCampaign",
+      "description": "Festival campaigns, Shubh Muhurta, and Vastu daily push alerts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "category": { "type": "string" },
+        "targetTab": { "type": "string" },
+        "targetFestivalId": { "type": "string" },
+        "countdownText": { "type": "string" },
+        "dateLabel": { "type": "string" },
+        "iconName": { "type": "string" },
+        "priority": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "body", "targetTab"]
+    },
+    "SystemConfig": {
+      "title": "SystemConfig",
+      "description": "App branding, custom icons, menu navigation, theme, and push gateway configurations",
+      "type": "object",
+      "properties": {
+        "appName": { "type": "string" },
+        "tagline": { "type": "string" },
+        "primaryColor": { "type": "string" },
+        "secondaryColor": { "type": "string" },
+        "appIconUrl": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User accounts and saved property spatial layouts"
+    },
+    "/audit_reports/{reportId}": {
+      "schema": { "$ref": "#/entities/AuditReport" },
+      "description": "Generated Vastu audit reports and certificates"
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Completed payments and membership plan transactions"
+    },
+    "/adsense_reports/{reportId}": {
+      "schema": { "$ref": "#/entities/AdSenseReport" },
+      "description": "AdSense tracking logs and daily monetization analytics"
+    },
+    "/vastu_knowledge_db/{ruleId}": {
+      "schema": { "$ref": "#/entities/VastuKnowledgeRule" },
+      "description": "Offline Vastu Shastra rules and remedies repository"
+    },
+    "/consultations/{docId}": {
+      "schema": { "$ref": "#/entities/Consultation" },
+      "description": "Consultation forum inquiries and admin response threads"
+    },
+    "/app_content/{contentId}": {
+      "schema": { "$ref": "#/entities/PushNotificationCampaign" },
+      "description": "Push notification alerts, gateway settings, and legal policies"
+    },
+    "/system_config/{configId}": {
+      "schema": { "$ref": "#/entities/SystemConfig" },
+      "description": "App branding, custom icons, menu navigation, and theme configurations"
+    },
+    "/system_settings/{settingId}": {
+      "schema": { "type": "object" },
+      "description": "Global application feature flags, sensor defaults, and API settings"
+    }
+  }
+}
