@@ -15,7 +15,14 @@ import { AppIntroModal } from './AppIntroModal';
 import { AdSenseUnit } from './AdSenseUnit';
 import { PushNotificationCenterModal, DEFAULT_CULTURAL_ALERTS } from './PushNotificationCenterModal';
 import { PushNotificationBanner } from './PushNotificationBanner';
-import { subscribeToPushAlerts, savePushAlertsToStorage } from '../utils/pushNotificationManager';
+import {
+  subscribeToPushAlerts,
+  getUserDeviceAlerts,
+  markAllAlertsReadOnUserDevice,
+  toggleAlertReadOnUserDevice,
+  dismissAlertOnUserDevice,
+  addAlertToUserDevice,
+} from '../utils/pushNotificationManager';
 import { PlacedRoom, PropertyRecord, UserProfile, SubscriptionPlanId, PushNotificationAlert } from '../types';
 import { calculateHouseAudit, playTempleBellChime } from '../utils/vastuUtils';
 import { performAutoGeotag, getSystemSettings, getIntroScreens, subscribeToSystemSettings } from '../utils/systemSettings';
@@ -419,24 +426,23 @@ export const FlutterAppContainer: React.FC = () => {
   const [selectedPlanForRazorpay, setSelectedPlanForRazorpay] = useState<string>('lifetime_pro');
   const [pendingPlanPurchase, setPendingPlanPurchase] = useState<string | null>(null);
 
-  // Push Notifications State
+  // Push Notifications State (Strictly isolated to this device)
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState<boolean>(false);
   const [pushAlerts, setPushAlerts] = useState<PushNotificationAlert[]>(() => {
-    try {
-      const saved = localStorage.getItem('vastu_push_alerts_list');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return DEFAULT_CULTURAL_ALERTS;
+    return getUserDeviceAlerts();
   });
 
   const [activeBannerAlert, setActiveBannerAlert] = useState<PushNotificationAlert | null>(() => {
-    return DEFAULT_CULTURAL_ALERTS.find((a) => !a.isRead && a.priority === 'high') || null;
+    const alerts = getUserDeviceAlerts();
+    return alerts.find((a) => !a.isRead && a.priority === 'high') || null;
   });
 
   useEffect(() => {
-    const unsub = subscribeToPushAlerts((updatedAlerts) => {
-      setPushAlerts(updatedAlerts);
-      const highPriUnread = updatedAlerts.find((a) => !a.isRead && a.priority === 'high');
+    // Listen to real-time broadcasts from backend, but filter and merge locally for this device
+    const unsub = subscribeToPushAlerts((masterCampaigns) => {
+      const deviceAlerts = getUserDeviceAlerts(masterCampaigns);
+      setPushAlerts(deviceAlerts);
+      const highPriUnread = deviceAlerts.find((a) => !a.isRead && a.priority === 'high');
       if (highPriUnread) {
         setActiveBannerAlert(highPriUnread);
       }
@@ -456,28 +462,27 @@ export const FlutterAppContainer: React.FC = () => {
   }, []);
 
   const handleMarkAllAlertsRead = () => {
-    const updated = pushAlerts.map((a) => ({ ...a, isRead: true }));
+    const updated = markAllAlertsReadOnUserDevice();
     setPushAlerts(updated);
-    savePushAlertsToStorage(updated);
   };
 
   const handleToggleAlertRead = (id: string) => {
-    const updated = pushAlerts.map((a) => (a.id === id ? { ...a, isRead: !a.isRead } : a));
+    const updated = toggleAlertReadOnUserDevice(id);
     setPushAlerts(updated);
-    savePushAlertsToStorage(updated);
   };
 
   const handleDismissAlert = (id: string) => {
-    const updated = pushAlerts.filter((a) => a.id !== id);
+    const updated = dismissAlertOnUserDevice(id);
     setPushAlerts(updated);
-    savePushAlertsToStorage(updated);
+    if (activeBannerAlert?.id === id) {
+      setActiveBannerAlert(null);
+    }
   };
 
   const handleAddCustomAlert = (newAlert: PushNotificationAlert) => {
-    const updated = [newAlert, ...pushAlerts];
+    const updated = addAlertToUserDevice(newAlert);
     setPushAlerts(updated);
     setActiveBannerAlert(newAlert);
-    savePushAlertsToStorage(updated);
   };
 
   // User account state

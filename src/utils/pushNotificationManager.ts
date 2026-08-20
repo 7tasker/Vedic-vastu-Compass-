@@ -337,6 +337,159 @@ const LOCAL_STORAGE_GATEWAY_KEY = 'vastu_push_gateway_config';
 const LOCAL_STORAGE_DEVICE_CAP_KEY = 'vastu_device_cap_settings';
 const LOCAL_STORAGE_DEVICE_STATS_KEY = 'vastu_device_delivery_stats';
 
+// User Device Local Isolation Storage Keys
+const LOCAL_STORAGE_USER_DEVICE_ALERTS_KEY = 'vastu_user_device_notifications';
+const LOCAL_STORAGE_USER_DISMISSED_IDS_KEY = 'vastu_user_dismissed_alert_ids';
+const LOCAL_STORAGE_USER_READ_IDS_KEY = 'vastu_user_read_alert_ids';
+
+/**
+ * Get Set of alert IDs dismissed/cleared specifically on this user's device
+ */
+export const getUserDismissedAlertIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_USER_DISMISSED_IDS_KEY);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set<string>();
+};
+
+/**
+ * Get Set of alert IDs marked read specifically on this user's device
+ */
+export const getUserReadAlertIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_USER_READ_IDS_KEY);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set<string>();
+};
+
+/**
+ * Get the notifications list stored strictly inside THIS user's device.
+ * Filters out dismissed items and respects local read/unread flags.
+ * NEVER alters the backend push campaign catalog!
+ */
+export const getUserDeviceAlerts = (masterCampaigns?: PushNotificationAlert[]): PushNotificationAlert[] => {
+  const master = masterCampaigns || getPushAlertsFromStorage();
+  const dismissedIds = getUserDismissedAlertIds();
+  const readIds = getUserReadAlertIds();
+
+  // 1. Try reading any custom device-local notifications cached on device
+  let localCustomList: PushNotificationAlert[] = [];
+  try {
+    const saved = localStorage.getItem(LOCAL_STORAGE_USER_DEVICE_ALERTS_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        localCustomList = parsed.filter((item) => item && typeof item.id === 'string' && item.id.startsWith('custom_device_'));
+      }
+    }
+  } catch {}
+
+  // 2. Filter out campaigns that the user cleared/dismissed on this device
+  const activeDeviceAlerts: PushNotificationAlert[] = master
+    .filter((camp) => !dismissedIds.has(camp.id))
+    .map((camp) => ({
+      ...camp,
+      isRead: readIds.has(camp.id) ? true : camp.isRead,
+    }));
+
+  const merged = [...localCustomList.filter((c) => !dismissedIds.has(c.id)), ...activeDeviceAlerts];
+  return merged;
+};
+
+/**
+ * Dismiss a notification on this user's device.
+ * Stored strictly on the local device; does NOT delete the backend active campaign!
+ */
+export const dismissAlertOnUserDevice = (alertId: string): PushNotificationAlert[] => {
+  const dismissed = getUserDismissedAlertIds();
+  dismissed.add(alertId);
+  try {
+    localStorage.setItem(LOCAL_STORAGE_USER_DISMISSED_IDS_KEY, JSON.stringify(Array.from(dismissed)));
+  } catch {}
+
+  const updated = getUserDeviceAlerts();
+  try {
+    localStorage.setItem(LOCAL_STORAGE_USER_DEVICE_ALERTS_KEY, JSON.stringify(updated));
+  } catch {}
+  return updated;
+};
+
+/**
+ * Clear all notifications on this user's device.
+ * Stored strictly on the local device; does NOT delete the backend active campaign calendar!
+ */
+export const clearAllAlertsOnUserDevice = (): PushNotificationAlert[] => {
+  const current = getUserDeviceAlerts();
+  const dismissed = getUserDismissedAlertIds();
+  current.forEach((a) => dismissed.add(a.id));
+
+  try {
+    localStorage.setItem(LOCAL_STORAGE_USER_DISMISSED_IDS_KEY, JSON.stringify(Array.from(dismissed)));
+    localStorage.setItem(LOCAL_STORAGE_USER_DEVICE_ALERTS_KEY, JSON.stringify([]));
+  } catch {}
+
+  return [];
+};
+
+/**
+ * Mark a single alert as Read/Unread on this user's device
+ */
+export const toggleAlertReadOnUserDevice = (alertId: string): PushNotificationAlert[] => {
+  const readIds = getUserReadAlertIds();
+  if (readIds.has(alertId)) {
+    readIds.delete(alertId);
+  } else {
+    readIds.add(alertId);
+  }
+
+  try {
+    localStorage.setItem(LOCAL_STORAGE_USER_READ_IDS_KEY, JSON.stringify(Array.from(readIds)));
+  } catch {}
+
+  const updated = getUserDeviceAlerts();
+  try {
+    localStorage.setItem(LOCAL_STORAGE_USER_DEVICE_ALERTS_KEY, JSON.stringify(updated));
+  } catch {}
+  return updated;
+};
+
+/**
+ * Mark all notifications as Read on this user's device
+ */
+export const markAllAlertsReadOnUserDevice = (): PushNotificationAlert[] => {
+  const current = getUserDeviceAlerts();
+  const readIds = getUserReadAlertIds();
+  current.forEach((a) => readIds.add(a.id));
+
+  try {
+    localStorage.setItem(LOCAL_STORAGE_USER_READ_IDS_KEY, JSON.stringify(Array.from(readIds)));
+  } catch {}
+
+  const updated = current.map((a) => ({ ...a, isRead: true }));
+  try {
+    localStorage.setItem(LOCAL_STORAGE_USER_DEVICE_ALERTS_KEY, JSON.stringify(updated));
+  } catch {}
+  return updated;
+};
+
+/**
+ * Add a local custom device alert (e.g. personal reminder) on this user's device
+ */
+export const addAlertToUserDevice = (alert: PushNotificationAlert): PushNotificationAlert[] => {
+  const current = getUserDeviceAlerts();
+  const deviceAlert = {
+    ...alert,
+    id: alert.id.startsWith('custom_device_') ? alert.id : `custom_device_${alert.id}`,
+  };
+  const updated = [deviceAlert, ...current];
+  try {
+    localStorage.setItem(LOCAL_STORAGE_USER_DEVICE_ALERTS_KEY, JSON.stringify(updated));
+  } catch {}
+  return updated;
+};
+
 /**
  * Detect Current Device Profile (Mobile vs Tablet vs Desktop, OS, Capabilities)
  */
