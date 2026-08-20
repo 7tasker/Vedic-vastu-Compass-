@@ -89,11 +89,13 @@ export interface UserDbProfile {
   uid: string;
   email: string;
   name: string;
+  phone?: string;
   photoURL?: string;
   role: 'admin' | 'user';
   isProMember: boolean;
   activePlan?: string;
   savedPropertiesCount: number;
+  savedProperties?: PropertyRecord[];
   createdAt: string;
   lastLoginAt: string;
 }
@@ -991,6 +993,135 @@ export const loadUserPropertiesFromFirestore = async (
   }
 
   return localProperties;
+};
+
+/**
+ * Save or update a specific property address with its tied user details,
+ * payment receipt number, Vastu report number, and consultation signing details
+ * both to /properties/{propertyId} and in the user's properties array.
+ */
+export const savePropertyAddressToFirestore = async (
+  property: PropertyRecord
+): Promise<boolean> => {
+  if (!property.id) return false;
+
+  // 1. Update in local storage
+  try {
+    const userKey = `vastu_user_properties_${property.userId || 'guest'}`;
+    const saved = localStorage.getItem(userKey);
+    let list: PropertyRecord[] = saved ? JSON.parse(saved) : [];
+    const idx = list.findIndex((p) => p.id === property.id);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...property };
+    } else {
+      list.push(property);
+    }
+    localStorage.setItem(userKey, JSON.stringify(list));
+
+    // Also update all_properties collection in localStorage
+    const allPropsKey = 'vastu_all_properties_db';
+    const allSaved = localStorage.getItem(allPropsKey);
+    let allList: PropertyRecord[] = allSaved ? JSON.parse(allSaved) : [];
+    const allIdx = allList.findIndex((p) => p.id === property.id);
+    if (allIdx >= 0) {
+      allList[allIdx] = { ...allList[allIdx], ...property };
+    } else {
+      allList.push(property);
+    }
+    localStorage.setItem(allPropsKey, JSON.stringify(allList));
+  } catch (err) {
+    console.warn('Local property address save error:', err);
+  }
+
+  // 2. Persist to Firestore /properties/{propertyId} and update user record
+  if (isConfigValid) {
+    try {
+      const propDocRef = doc(db, 'properties', property.id);
+      await setDoc(propDocRef, property, { merge: true });
+
+      if (property.userId && property.userId !== 'guest') {
+        const userRef = doc(db, 'users', property.userId);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          let props: PropertyRecord[] = Array.isArray(userData.properties) ? userData.properties : [];
+          const pIdx = props.findIndex((p) => p.id === property.id);
+          if (pIdx >= 0) {
+            props[pIdx] = { ...props[pIdx], ...property };
+          } else {
+            props.push(property);
+          }
+          await setDoc(
+            userRef,
+            {
+              properties: props,
+              savedPropertiesCount: props.length,
+              lastPropertyUpdated: property.id,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        }
+      }
+      return true;
+    } catch (err) {
+      console.warn('Firestore property address save error:', err);
+    }
+  }
+
+  return true;
+};
+
+/**
+ * Delete a property address from Firestore and local storage
+ */
+export const deletePropertyAddressFromFirestore = async (
+  propertyId: string,
+  userId?: string
+): Promise<boolean> => {
+  try {
+    const userKey = `vastu_user_properties_${userId || 'guest'}`;
+    const saved = localStorage.getItem(userKey);
+    if (saved) {
+      const list: PropertyRecord[] = JSON.parse(saved);
+      const filtered = list.filter((p) => p.id !== propertyId);
+      localStorage.setItem(userKey, JSON.stringify(filtered));
+    }
+
+    const allPropsKey = 'vastu_all_properties_db';
+    const allSaved = localStorage.getItem(allPropsKey);
+    if (allSaved) {
+      const allList: PropertyRecord[] = JSON.parse(allSaved);
+      const allFiltered = allList.filter((p) => p.id !== propertyId);
+      localStorage.setItem(allPropsKey, JSON.stringify(allFiltered));
+    }
+  } catch {}
+
+  if (isConfigValid) {
+    try {
+      await deleteDoc(doc(db, 'properties', propertyId));
+      if (userId && userId !== 'guest') {
+        const userRef = doc(db, 'users', userId);
+        const snap = await getDoc(userRef);
+        if (snap.exists() && Array.isArray(snap.data()?.properties)) {
+          const remaining = (snap.data().properties as PropertyRecord[]).filter((p) => p.id !== propertyId);
+          await setDoc(
+            userRef,
+            {
+              properties: remaining,
+              savedPropertiesCount: remaining.length,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        }
+      }
+      return true;
+    } catch (err) {
+      console.warn('Firestore property address delete error:', err);
+    }
+  }
+  return true;
 };
 
 // =========================================================================

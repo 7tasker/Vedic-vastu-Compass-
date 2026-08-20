@@ -115,6 +115,34 @@ export interface PropertyRecord {
   floorplanScale?: number;
   floorplanFlipH?: boolean;
   floorplanFlipV?: boolean;
+  // User Tied Information
+  userId?: string;
+  userName?: string;
+  userEmail?: string;
+  userPhone?: string;
+  // Payment Details
+  paymentReceiptNo?: string;
+  paymentStatus?: 'paid' | 'unpaid' | 'pro_unlocked' | 'free_tier';
+  paymentAmount?: number;
+  paymentCurrency?: string;
+  paymentGateway?: string;
+  paymentDate?: string;
+  // Vastu Report Details
+  vastuReportNumber?: string;
+  reportRefNumber?: string;
+  overallScore?: number;
+  grade?: string;
+  doshCount?: number;
+  reportDate?: string;
+  // Consultation & Signing Details
+  consultationId?: string;
+  consultationTopic?: string;
+  consultationStatus?: 'approved' | 'signed' | 'pending' | 'completed';
+  isSigned?: boolean;
+  signedByName?: string;
+  signedAt?: string;
+  signatureDataUrl?: string;
+  consultationNotes?: string;
 }
 
 export type SubscriptionPlanId = 'single_property' | 'pass_2weeks' | 'pass_4weeks' | 'lifetime_pro';
@@ -134,6 +162,7 @@ export interface UserProfile {
   uid?: string;
   name: string;
   email: string;
+  phone?: string;
   role?: 'admin' | 'user';
   isLoggedIn: boolean;
   isProMember: boolean;
@@ -141,6 +170,7 @@ export interface UserProfile {
   unlockedPropertyIds?: string[];
   planExpiryDate?: string;
   savedPropertiesCount: number;
+  savedProperties?: PropertyRecord[];
 }
 
 export interface GeminiVastuConsultRequest {

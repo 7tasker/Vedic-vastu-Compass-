@@ -46,6 +46,7 @@ import { AdminEmailTemplatesTab } from './admin/AdminEmailTemplatesTab';
 import { AdminLicenseKeysTab } from './admin/AdminLicenseKeysTab';
 import { AdminPushNotificationsTab } from './admin/AdminPushNotificationsTab';
 import { AdminTaxReceiptTemplateTab } from './admin/AdminTaxReceiptTemplateTab';
+import { AdminUserProfilesTab, DEFAULT_USER_PROFILES_WITH_ADDRESSES } from './admin/AdminUserProfilesTab';
 import {
   getVastuKnowledgeDb,
   getVastuDbStats,
@@ -533,49 +534,16 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const fetchAdminData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Users
+      // 1. Fetch Users & Tied Property Addresses
       const usersSnap = await getDocs(collection(db, 'users'));
       const fetchedUsers: UserDbProfile[] = [];
       usersSnap.forEach((doc) => {
         const uData = doc.data() as UserDbProfile;
         fetchedUsers.push({ ...uData, uid: uData.uid || doc.id });
       });
-      // Mock initial fallback if Firestore empty
+      // Fallback with rich default dataset if Firestore is empty
       if (fetchedUsers.length === 0) {
-        fetchedUsers.push(
-          {
-            uid: 'admin_1',
-            email: ADMIN_EMAIL,
-            name: '7Tasker Admin',
-            role: 'admin',
-            isProMember: true,
-            activePlan: 'lifetime_pro',
-            savedPropertiesCount: 4,
-            createdAt: '2026-08-01T08:00:00.000Z',
-            lastLoginAt: new Date().toISOString(),
-          },
-          {
-            uid: 'usr_102',
-            email: 'rajesh.sharma@gmail.com',
-            name: 'Rajesh Sharma',
-            role: 'user',
-            isProMember: true,
-            activePlan: 'monthly_pro',
-            savedPropertiesCount: 2,
-            createdAt: '2026-08-01T10:30:00.000Z',
-            lastLoginAt: new Date().toISOString(),
-          },
-          {
-            uid: 'usr_103',
-            email: 'priya.architect@mumbai.in',
-            name: 'Priya Mehta',
-            role: 'user',
-            isProMember: false,
-            savedPropertiesCount: 1,
-            createdAt: '2026-08-01T14:20:00.000Z',
-            lastLoginAt: new Date().toISOString(),
-          }
-        );
+        fetchedUsers.push(...DEFAULT_USER_PROFILES_WITH_ADDRESSES);
       }
       setUserList(fetchedUsers);
 
@@ -1004,6 +972,65 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
     const a = document.createElement('a');
     a.href = url;
     a.download = `7tasker_vastu_payments_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    playTempleBellChime();
+  };
+
+  // Export Audit Reports CSV
+  const handleDownloadAuditReportsCsv = () => {
+    const headers = 'ReportRefNo,UserName,UserEmail,PropertyName,PropertyType,FacingDirection,OverallScore,Grade,TotalRooms,DoshCount,CreatedAt\n';
+    const rows = auditReportsList
+      .map(
+        (r) =>
+          `"${r.reportRefNumber || r.id}","${r.userName || ''}","${r.userEmail || ''}","${r.propertyName || ''}","${r.propertyType || ''}","${r.facingDirection || ''}",${r.overallScore || 0},"${r.grade || ''}",${r.totalRooms || 0},${r.doshCount || 0},"${r.createdAt || ''}"`
+      )
+      .join('\n');
+
+    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vastu_audit_reports_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    playTempleBellChime();
+  };
+
+  // Export Audit Reports JSON
+  const handleDownloadAuditReportsJson = () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(auditReportsList, null, 2));
+    const a = document.createElement('a');
+    a.href = dataStr;
+    a.download = `vastu_audit_reports_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    playTempleBellChime();
+  };
+
+  // Export Consultations CSV
+  const handleDownloadConsultationsCsv = () => {
+    const headers = 'ID,Topic,UserName,UserEmail,Phone,PropertyType,FacingDirection,ReportRefNo,Status,Question,AdminReply,RepliedAt,CreatedAt\n';
+    const escapeCsv = (str: string) => `"${(str || '').replace(/"/g, '""')}"`;
+    const rows = consultationsList
+      .map(
+        (c) =>
+          `${escapeCsv(c.id)},${escapeCsv(c.topic)},${escapeCsv(c.userName)},${escapeCsv(c.userEmail)},${escapeCsv(c.phone || '')},${escapeCsv(c.propertyType)},${escapeCsv(c.facingDirection)},${escapeCsv(c.reportRefNumber || '')},${escapeCsv(c.status)},${escapeCsv(c.question)},${escapeCsv(c.adminReply || '')},${escapeCsv(c.repliedAt || '')},${escapeCsv(c.createdAt)}`
+      )
+      .join('\n');
+
+    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vastu_consultations_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    playTempleBellChime();
+  };
+
+  // Export Consultations JSON
+  const handleDownloadConsultationsJson = () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(consultationsList, null, 2));
+    const a = document.createElement('a');
+    a.href = dataStr;
+    a.download = `vastu_consultations_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     playTempleBellChime();
   };
@@ -2592,92 +2619,13 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
           );
         })()}
 
-        {/* USER PROFILES TAB */}
+        {/* USER PROFILES & TIED PROPERTY ADDRESSES DATABASE TAB */}
         {activeTab === 'users' && (
-          <div className="bg-white p-6 rounded-3xl border border-[#E8DCC4] shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between gap-3 items-center">
-              <h3 className="text-base font-serif font-bold text-[#78350F]">
-                User Profiles Database
-              </h3>
-              <div className="relative w-full sm:w-64">
-                <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#A68A64]" />
-                <input
-                  type="text"
-                  placeholder="Search user by name or email..."
-                  value={userSearchQuery}
-                  onChange={(e) => setUserSearchQuery(e.target.value)}
-                  className="w-full text-xs font-medium bg-[#FAF7F2] border border-[#E8DCC4] rounded-xl p-2 pl-9 outline-none focus:ring-2 focus:ring-[#D97706]"
-                />
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-[#FAF7F2] border-b border-[#E8DCC4] text-[#8B735B] uppercase text-[10px] font-bold">
-                    <th className="p-3">User / Email</th>
-                    <th className="p-3">Role</th>
-                    <th className="p-3">Vastu Pro Pass</th>
-                    <th className="p-3">Saved Houses</th>
-                    <th className="p-3">Created Date</th>
-                    <th className="p-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E8DCC4]">
-                  {userList
-                    .filter(
-                      (u) =>
-                        (u.name || '').toLowerCase().includes((userSearchQuery || '').toLowerCase()) ||
-                        (u.email || '').toLowerCase().includes((userSearchQuery || '').toLowerCase())
-                    )
-                    .map((user, idx) => (
-                      <tr key={user.uid || user.email || `user-${idx}`} className="hover:bg-[#FFFBEB] transition-colors">
-                        <td className="p-3 font-semibold">
-                          <div className="text-[#78350F] font-bold">{user.name}</div>
-                          <div className="text-[10px] text-[#8B735B] font-mono">{user.email}</div>
-                        </td>
-                        <td className="p-3">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                              user.role === 'admin'
-                                ? 'bg-[#78350F] text-white'
-                                : 'bg-[#F3EFE0] text-[#78350F]'
-                            }`}
-                          >
-                            {user.role}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                              user.isProMember
-                                ? 'bg-[#ECFDF5] text-[#059669] border border-[#A7F3D0]'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}
-                          >
-                            {user.isProMember ? 'PRO ACTIVE' : 'FREE USER'}
-                          </span>
-                        </td>
-                        <td className="p-3 font-bold text-[#D97706]">
-                          {user.savedPropertiesCount || 1} Properties
-                        </td>
-                        <td className="p-3 text-[11px] text-[#8B735B]">
-                          {user.createdAt ? user.createdAt.split('T')[0] : '01/08/2026'}
-                        </td>
-                        <td className="p-3 text-right">
-                          <button
-                            onClick={() => handleToggleProStatus(user.uid, user.isProMember)}
-                            className="px-2.5 py-1 bg-[#78350F] hover:bg-[#5C280B] text-white text-[10px] font-bold uppercase rounded-lg shadow-xs"
-                          >
-                            {user.isProMember ? 'Revoke Pro' : 'Grant Pro'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <AdminUserProfilesTab
+            userList={userList}
+            onUpdateUserList={(updated) => setUserList(updated)}
+            onNotify={(msg) => setAdminMsg(msg)}
+          />
         )}
 
         {/* AUDIT REPORTS DATABASE TAB */}
@@ -2692,7 +2640,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                   Live backend records of all house audit reference numbers, user emails, scores, and property details.
                 </p>
               </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <button
                   onClick={fetchAdminAuditReports}
                   className="p-2 bg-[#FAF7F2] border border-[#E8DCC4] text-[#78350F] rounded-xl hover:bg-[#F3EFE0] transition-all text-xs font-bold flex items-center gap-1"
@@ -2701,7 +2649,23 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                   <RefreshCw className={`w-3.5 h-3.5 ${loadingAuditReports ? 'animate-spin' : ''}`} />
                   Refresh
                 </button>
-                <div className="relative w-full sm:w-64">
+                <button
+                  onClick={handleDownloadAuditReportsCsv}
+                  className="p-2 bg-[#059669] hover:bg-[#047857] text-white rounded-xl transition-all text-xs font-bold flex items-center gap-1 shadow-xs"
+                  title="Export Audit Reports as CSV"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  CSV
+                </button>
+                <button
+                  onClick={handleDownloadAuditReportsJson}
+                  className="p-2 bg-[#78350F] hover:bg-[#5C280B] text-white rounded-xl transition-all text-xs font-bold flex items-center gap-1 shadow-xs"
+                  title="Export Audit Reports as JSON"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  JSON
+                </button>
+                <div className="relative w-full sm:w-56">
                   <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#A68A64]" />
                   <input
                     type="text"
@@ -4970,13 +4934,27 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                     View user consultation requests submitted from the app, review room orientation details, and post official admin responses.
                   </p>
                 </div>
-                <button
-                  onClick={fetchAdminConsultations}
-                  disabled={loadingConsultations}
-                  className="px-4 py-2 bg-[#78350F] hover:bg-[#5C280B] text-[#F3EFE0] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-2xs self-start sm:self-auto"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loadingConsultations ? 'animate-spin' : ''}`} /> Refresh Forum
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={fetchAdminConsultations}
+                    disabled={loadingConsultations}
+                    className="px-3.5 py-2 bg-[#FAF7F2] border border-[#E8DCC4] hover:bg-[#F3EFE0] text-[#78350F] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-2xs self-start sm:self-auto"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loadingConsultations ? 'animate-spin' : ''}`} /> Refresh
+                  </button>
+                  <button
+                    onClick={handleDownloadConsultationsCsv}
+                    className="px-3.5 py-2 bg-[#059669] hover:bg-[#047857] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-2xs"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Export CSV
+                  </button>
+                  <button
+                    onClick={handleDownloadConsultationsJson}
+                    className="px-3.5 py-2 bg-[#78350F] hover:bg-[#5C280B] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-2xs"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Export JSON
+                  </button>
+                </div>
               </div>
 
               {/* Consultation Summary Grid */}

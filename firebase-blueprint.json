@@ -13,10 +13,54 @@
         "isProMember": { "type": "boolean" },
         "activePlan": { "type": "string" },
         "savedPropertiesCount": { "type": "number" },
+        "savedProperties": {
+          "type": "array",
+          "items": { "$ref": "#/entities/PropertyAddress" }
+        },
         "createdAt": { "type": "string" },
         "lastLoginAt": { "type": "string" }
       },
       "required": ["uid", "email"]
+    },
+    "PropertyAddress": {
+      "title": "PropertyAddress",
+      "description": "Property address tied directly with user details, payment receipt, Vastu audit report number, and consultation signing certification",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "addressType": { "type": "string" },
+        "propertyType": { "type": "string" },
+        "facingDegree": { "type": "number" },
+        "placedRoomsCount": { "type": "number" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userPhone": { "type": "string" },
+        "paymentReceiptNo": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "paymentAmount": { "type": "number" },
+        "paymentCurrency": { "type": "string" },
+        "paymentGateway": { "type": "string" },
+        "paymentDate": { "type": "string" },
+        "vastuReportNumber": { "type": "string" },
+        "reportRefNumber": { "type": "string" },
+        "overallScore": { "type": "number" },
+        "grade": { "type": "string" },
+        "doshCount": { "type": "number" },
+        "reportDate": { "type": "string" },
+        "consultationId": { "type": "string" },
+        "consultationTopic": { "type": "string" },
+        "consultationStatus": { "type": "string" },
+        "isSigned": { "type": "boolean" },
+        "signedByName": { "type": "string" },
+        "signedAt": { "type": "string" },
+        "signatureDataUrl": { "type": "string" },
+        "consultationNotes": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "address", "userId"]
     },
     "AuditReport": {
       "title": "AuditReport",
@@ -183,6 +227,10 @@
     "/system_config/{configId}": {
       "schema": { "$ref": "#/entities/SystemConfig" },
       "description": "App branding, custom icons, menu navigation, and theme configurations"
+    },
+    "/properties/{propertyId}": {
+      "schema": { "$ref": "#/entities/PropertyAddress" },
+      "description": "Registered property addresses tied to user details, payment receipt, Vastu report number, and consultation signing"
     },
     "/system_settings/{settingId}": {
       "schema": { "type": "object" },
