@@ -1,5 +1,5 @@
 {
-  "name": "Copy of Vastu Compass",
+  "name": "Vastu Compass",
   "description": "Production-grade Android & Web Hindu Vastu Shastra compass with magnetometer sensor integration, address-centric backend database tying property addresses with payment receipts, Vastu report numbers, and digital consultation signing details.",
   "requestFramePermissions": [
     "geolocation",

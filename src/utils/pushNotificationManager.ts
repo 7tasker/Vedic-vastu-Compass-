@@ -492,6 +492,7 @@ export const addAlertToUserDevice = (alert: PushNotificationAlert): PushNotifica
 
 /**
  * Detect Current Device Profile (Mobile vs Tablet vs Desktop, OS, Capabilities)
+ * Enhanced with full Android APK, Capacitor, Cordova & WebView Bridge detection
  */
 export const detectCurrentDevice = (): DeviceProfile => {
   if (typeof window === 'undefined') {
@@ -510,33 +511,53 @@ export const detectCurrentDevice = (): DeviceProfile => {
   const ua = navigator.userAgent || '';
   const isMobileUA = /Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
   const isTabletUA = /(iPad|tablet|(android(?!.*mobile))|(windows(?!.*phone)(.*touch))|kindle|playbook|silk)/i.test(ua);
+  const isAndroidUA = /Android/i.test(ua);
   const width = window.innerWidth;
   const height = window.innerHeight;
+
+  // Native Android & Hybrid Container Detection
+  const cap = (window as any).Capacitor;
+  const isCapacitorNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
+  const isAndroidBridge = !!((window as any).Android || (window as any).flutter_inappwebview || (window as any).cordova || isCapacitorNative);
 
   let deviceType: DeviceType = 'desktop';
   if (isTabletUA || (width >= 640 && width <= 1024 && 'ontouchstart' in window)) {
     deviceType = 'tablet';
-  } else if (isMobileUA || width < 640 || ('ontouchstart' in window && width <= 768)) {
+  } else if (isMobileUA || isAndroidUA || isAndroidBridge || width < 640 || ('ontouchstart' in window && width <= 768)) {
     deviceType = 'mobile';
   }
 
   let os = 'Unknown OS';
   if (/iPad|iPhone|iPod/.test(ua)) os = 'iOS';
-  else if (/Android/.test(ua)) os = 'Android';
+  else if (isAndroidUA || isAndroidBridge) os = 'Android';
   else if (/Macintosh|Mac OS X/.test(ua)) os = 'macOS';
   else if (/Windows/.test(ua)) os = 'Windows';
   else if (/Linux/.test(ua)) os = 'Linux';
 
   let browser = 'Browser';
-  if (/Chrome/.test(ua) && !/Edge|OPR/.test(ua)) browser = 'Chrome';
+  if (isCapacitorNative) browser = 'Capacitor Android APK';
+  else if (isAndroidBridge) browser = 'Android APK WebView';
+  else if (/Chrome/.test(ua) && !/Edge|OPR/.test(ua)) browser = 'Chrome';
   else if (/Safari/.test(ua) && !/Chrome/.test(ua)) browser = 'Safari';
   else if (/Firefox/.test(ua)) browser = 'Firefox';
   else if (/Edge/.test(ua)) browser = 'Edge';
 
-  const isStandalonePwa = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
-  const hasNotificationSupport = 'Notification' in window;
-  const hasVibrationSupport = 'vibrate' in navigator;
-  const permission = hasNotificationSupport ? Notification.permission : 'denied';
+  const isStandalonePwa = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true || isCapacitorNative;
+  
+  // In Android APK / WebView, standard 'Notification' in window may be undefined,
+  // but Capacitor/Android Native Bridge provides full native push/local notifications!
+  const hasWebNotificationSupport = 'Notification' in window;
+  const hasNotificationSupport = hasWebNotificationSupport || isCapacitorNative || isAndroidBridge;
+  const hasVibrationSupport = 'vibrate' in navigator || isCapacitorNative;
+
+  let permission: NotificationPermission = 'default';
+  if (hasWebNotificationSupport) {
+    permission = Notification.permission;
+  } else if (isCapacitorNative || isAndroidBridge) {
+    // In Native Android APK, check stored permission state or default to granted if running inside APK container
+    const storedPerm = localStorage.getItem('vastu_android_push_permission');
+    permission = (storedPerm as NotificationPermission) || 'granted';
+  }
 
   return {
     type: deviceType,
@@ -767,11 +788,23 @@ export const dispatchNativeDeviceNotification = async (
   }
 
   // Fire Native Android / Capacitor / Browser / PWA Notification
-  if (profile.hasNotificationSupport && (typeof Notification !== 'undefined' && Notification.permission === 'granted')) {
+  if (profile.hasNotificationSupport) {
     try {
-      // 1. Check Capacitor Native Local Notifications if running inside Android Studio build
       const cap = (window as any).Capacitor;
-      if (cap && cap.isNativePlatform && cap.isNativePlatform() && cap.Plugins?.LocalNotifications) {
+      const isCapacitorNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
+      const androidBridge = (window as any).Android;
+
+      // 1. Check Android Native JavascriptInterface (Android Studio custom WebView container)
+      if (androidBridge && typeof androidBridge.showNotification === 'function') {
+        try {
+          androidBridge.showNotification(alert.title, alert.body, JSON.stringify(alert));
+        } catch (bridgeErr) {
+          console.warn('Android JavascriptInterface notice:', bridgeErr);
+        }
+      }
+
+      // 2. Check Capacitor Native Local Notifications if running inside Android APK build
+      if (isCapacitorNative && cap.Plugins?.LocalNotifications) {
         await cap.Plugins.LocalNotifications.schedule({
           notifications: [
             {
@@ -792,7 +825,7 @@ export const dispatchNativeDeviceNotification = async (
         }).catch((e: any) => console.warn('Capacitor LocalNotification notice:', e));
       }
 
-      // 2. Try ServiceWorkerRegistration (Required on Android Chrome/PWA/WebView for top status bar)
+      // 3. Try ServiceWorkerRegistration (Required on Android Chrome/PWA/WebView for top status bar)
       let swDispatched = false;
       if ('serviceWorker' in navigator) {
         try {
@@ -820,8 +853,8 @@ export const dispatchNativeDeviceNotification = async (
         }
       }
 
-      // 3. Fallback to standard Window Notification if SW not active
-      if (!swDispatched && typeof Notification === 'function') {
+      // 4. Fallback to standard Window Notification if web Notification API is present
+      if (!swDispatched && typeof Notification === 'function' && Notification.permission === 'granted') {
         const notification = new Notification(alert.title, {
           body: alert.body,
           icon: '/favicon.ico',
@@ -1041,6 +1074,116 @@ export const broadcastPushAlertFromBackend = async (
   const dispatchRes = await dispatchNativeDeviceNotification(alertRecord);
 
   return { success: true, alert: alertRecord, dispatchResult: dispatchRes };
+};
+
+/**
+ * Subscribe to real-time push gateway & device cap settings from Firestore
+ * Automatically keeps user device caps in sync with Admin Dashboard settings
+ */
+export const subscribeToGatewayAndCapSettings = (
+  callback?: (config: PushGatewayConfig) => void
+): (() => void) => {
+  if (isConfigValid) {
+    try {
+      const docRef = doc(db, 'app_content', 'push_gateway_settings');
+      const unsub = onSnapshot(docRef, (snapshot) => {
+        if (snapshot.exists() && snapshot.data()) {
+          const data = snapshot.data();
+          const remoteConfig: PushGatewayConfig = {
+            ...DEFAULT_PUSH_GATEWAY_CONFIG,
+            ...data,
+            deviceCaps: { ...DEFAULT_DEVICE_CAP_SETTINGS, ...(data.deviceCaps || {}) },
+          };
+          try {
+            localStorage.setItem(LOCAL_STORAGE_GATEWAY_KEY, JSON.stringify(remoteConfig));
+            if (remoteConfig.deviceCaps) {
+              localStorage.setItem(LOCAL_STORAGE_DEVICE_CAP_KEY, JSON.stringify(remoteConfig.deviceCaps));
+            }
+          } catch {}
+          if (callback) callback(remoteConfig);
+        }
+      });
+      return unsub;
+    } catch (err) {
+      console.warn('Realtime push gateway settings subscription notice:', err);
+    }
+  }
+  return () => {};
+};
+
+/**
+ * Initialize Native Android Push Bridge & Interceptor
+ * Intercepts incoming background/foreground push events on Android APK
+ * and enforces device capping rules before letting notifications display.
+ */
+export const initNativeAndroidPushBridge = (): (() => void) => {
+  if (typeof window === 'undefined') return () => {};
+
+  // 1. Sync remote cap settings immediately
+  const unsubSettings = subscribeToGatewayAndCapSettings();
+
+  // 2. Hook Capacitor Push / Local Notification listeners if present
+  const cap = (window as any).Capacitor;
+  if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) {
+    try {
+      const pushPlugin = cap.Plugins?.PushNotifications;
+      if (pushPlugin && typeof pushPlugin.addListener === 'function') {
+        pushPlugin.addListener('pushNotificationReceived', async (notification: any) => {
+          const priority = notification?.data?.priority === 'high' ? 'high' : 'normal';
+          const evaluation = canDeliverToDevice(priority);
+          
+          if (!evaluation.allowed) {
+            console.warn(`[Android APK Capping] Push notification blocked: ${evaluation.reason} (Count: ${evaluation.countToday}/${evaluation.cap})`);
+            return;
+          }
+
+          // Allowed: record delivery
+          const alertObj: PushNotificationAlert = {
+            id: notification?.id || `push_${Date.now()}`,
+            title: notification?.title || 'Vastu Notification',
+            body: notification?.body || '',
+            category: notification?.data?.category || 'general',
+            targetTab: notification?.data?.targetTab || 'muhurta',
+            priority,
+            countdownText: notification?.data?.countdownText || 'Alert',
+            dateLabel: notification?.data?.dateLabel || 'Today',
+            iconName: notification?.data?.iconName || 'Flame',
+            createdAt: new Date().toISOString(),
+            isRead: false,
+          };
+          await dispatchNativeDeviceNotification(alertObj);
+        });
+      }
+    } catch (err) {
+      console.warn('Capacitor native push bridge registration notice:', err);
+    }
+  }
+
+  // 3. Hook custom Android WebView message listener
+  const handleAndroidMessage = async (event: any) => {
+    try {
+      let payload = event.data;
+      if (typeof payload === 'string' && payload.startsWith('{') && payload.includes('vastu_android_push')) {
+        payload = JSON.parse(payload);
+      }
+      if (payload && payload.type === 'vastu_android_push' && payload.alert) {
+        const priority = payload.alert.priority === 'high' ? 'high' : 'normal';
+        const evaluation = canDeliverToDevice(priority);
+        if (evaluation.allowed) {
+          await dispatchNativeDeviceNotification(payload.alert);
+        } else {
+          console.warn(`[Android APK Capping] Push blocked by cap rule: ${evaluation.reason}`);
+        }
+      }
+    } catch {}
+  };
+
+  window.addEventListener('message', handleAndroidMessage);
+
+  return () => {
+    unsubSettings();
+    window.removeEventListener('message', handleAndroidMessage);
+  };
 };
 
 /**

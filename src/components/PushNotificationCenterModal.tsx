@@ -358,7 +358,7 @@ export const PushNotificationCenterModal: React.FC<PushNotificationCenterModalPr
           <div className="flex items-center gap-2 self-end sm:self-auto shrink-0 flex-wrap">
             <button
               onClick={handleRequestPushPermission}
-              className={`px-3 py-1.5 text-white text-[11px] font-extrabold rounded-xl shadow-xs transition-all uppercase tracking-wider whitespace-nowrap cursor-pointer ${
+              className={`px-3.5 py-1.5 text-white text-[11px] font-extrabold rounded-xl shadow-xs transition-all uppercase tracking-wider whitespace-nowrap cursor-pointer ${
                 browserPermission === 'granted' || inAppPushEnabled
                   ? 'bg-[#059669] hover:bg-[#047857]'
                   : 'bg-[#D97706] hover:bg-[#B45309]'
@@ -369,14 +369,6 @@ export const PushNotificationCenterModal: React.FC<PushNotificationCenterModalPr
                 : inAppPushEnabled
                 ? '✓ Alerts Active (Refresh)'
                 : 'Enable Push'}
-            </button>
-
-            <button
-              onClick={() => handleTriggerTestPush(true)}
-              className="px-3 py-1.5 bg-[#78350F] hover:bg-[#5C280B] text-white text-[11px] font-extrabold rounded-xl shadow-xs transition-all uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
-              title="Dispatches test notification & banner alert to device"
-            >
-              <Zap className="w-3.5 h-3.5 text-[#F59E0B]" /> Test Alert
             </button>
           </div>
         </div>

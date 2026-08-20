@@ -1149,15 +1149,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                     id="paypal-button-container"
                     className="min-h-[30px] flex flex-col justify-center empty:hidden"
                   />
-
-                  <button
-                    type="button"
-                    onClick={() => setShowPaypalModal(true)}
-                    className="w-full py-3 bg-[#0070BA] hover:bg-[#003087] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Lock className="w-3.5 h-3.5 text-amber-300" />
-                    <span>Pay with PayPal Portal (${currentPlan.usd} USD)</span>
-                  </button>
                 </div>
               )}
 

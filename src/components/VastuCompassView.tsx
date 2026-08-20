@@ -549,28 +549,9 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
 
         {/* Degree Header & Current Zone */}
         <div className="text-center z-10">
-          <div className="inline-flex flex-wrap items-center justify-center gap-2 px-3 py-1 rounded-full bg-[#F3EFE0] text-[#78350F] text-xs font-sans font-semibold mb-1 border border-[#E8DCC4]">
+          <div className="inline-flex items-center justify-center gap-2 px-4 py-1.5 rounded-full bg-[#F3EFE0] text-[#78350F] text-xs font-sans font-semibold mb-1 border border-[#E8DCC4] shadow-2xs">
             <span className="w-2 h-2 rounded-full bg-[#D97706] animate-ping" />
             Facing Angle: <span className="font-bold text-[#3D342D] text-sm">{effectiveDegree}°</span>
-            {calibrationOffset !== 0 && (
-              <span className="text-[10px] text-[#D97706] font-extrabold bg-[#FEF3C7] px-1.5 py-0.5 rounded border border-[#FDE68A]">
-                Calibrated ({calibrationOffset > 0 ? `+${calibrationOffset}°` : `${calibrationOffset}°`})
-              </span>
-            )}
-            {isSensorActive && (
-              <span
-                className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
-                  sensorHealth === 'high'
-                    ? 'bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]'
-                    : sensorHealth === 'medium'
-                    ? 'bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A]'
-                    : 'bg-[#FEF2F2] text-[#991B1B] border border-[#FCA5A5]'
-                }`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${sensorHealth === 'high' ? 'bg-[#10B981]' : sensorHealth === 'medium' ? 'bg-[#F59E0B]' : 'bg-[#EF4444] animate-ping'}`} />
-                {sensorHealth === 'high' ? `Sensor ±${sensorAccuracyDeg || 1}°` : sensorHealth === 'medium' ? `Sensor ±${sensorAccuracyDeg || 3}°` : 'Sensor Distorted'}
-              </span>
-            )}
           </div>
           <p className="text-xs font-sans font-medium text-[#8B735B] flex items-center justify-center gap-2 mt-1">
             <span>Deity: <strong className="text-[#3D342D]">{currentZone.deity}</strong></span>
@@ -916,6 +897,23 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
               </button>
             </div>
 
+            {/* Top Right Sub-bar: Offset & Reset to Factory Default */}
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] text-[#8B735B]">
+                Current Offset: <strong className="text-[#78350F]">{calibrationOffset > 0 ? `+${calibrationOffset}°` : `${calibrationOffset}°`}</strong>
+              </span>
+              <button
+                onClick={() => {
+                  handleUpdateOffset(0);
+                  playTempleBellChime();
+                }}
+                className="text-[11px] font-bold text-[#991B1B] hover:text-[#7F1D1D] flex items-center gap-1.5 px-2.5 py-1 bg-[#FEF2F2] hover:bg-[#FEE2E2] rounded-lg border border-[#FECACA] transition-all cursor-pointer shadow-2xs"
+                title="Reset compass calibration offset to 0°"
+              >
+                <RotateCcw className="w-3 h-3 text-[#991B1B]" /> Reset to Factory Default (0°)
+              </button>
+            </div>
+
             {/* TAB 1: QUICK ZERO NORTH */}
             {calibrationTab === 'quick' && (
               <div className="space-y-4">
@@ -950,22 +948,6 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                   >
                     <Crosshair className="w-4 h-4 text-[#F59E0B]" />
                     Set Current Facing Direction as True North (0°)
-                  </button>
-                </div>
-
-                {/* Reset button */}
-                <div className="flex justify-between items-center pt-2 border-t border-[#E8DCC4]">
-                  <span className="text-xs text-[#8B735B]">
-                    Current Offset: <strong>{calibrationOffset > 0 ? `+${calibrationOffset}°` : `${calibrationOffset}°`}</strong>
-                  </span>
-                  <button
-                    onClick={() => {
-                      handleUpdateOffset(0);
-                      playTempleBellChime();
-                    }}
-                    className="text-xs font-bold text-[#991B1B] hover:text-[#7F1D1D] flex items-center gap-1"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" /> Reset to Factory Default (0°)
                   </button>
                 </div>
               </div>
@@ -1036,10 +1018,10 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                       </div>
                       <div>
                         <h4 className="text-xs font-serif font-bold text-[#78350F]">
-                          GPS Geolocation & True North Alignment
+                          GPS Geolocation Coordinates
                         </h4>
                         <span className="text-[10px] text-[#8B735B]">
-                          Live coordinates for geomagnetic declination & directional accuracy
+                          Live coordinates for geographical position & directional accuracy
                         </span>
                       </div>
                     </div>
@@ -1106,32 +1088,6 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                         <span>Accuracy: <strong>±{userLocation.accuracy || 5}m</strong></span>
                         <span>{userLocation.country || 'Northern Hemisphere'}</span>
                       </div>
-
-                      {/* Computed Magnetic Declination Offset */}
-                      {(() => {
-                        const declination = calculateMagneticDeclination(userLocation.latitude, userLocation.longitude);
-                        return (
-                          <div className="pt-2 border-t border-[#E8DCC4] space-y-2">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="font-semibold text-[#8B735B]">True North Magnetic Declination:</span>
-                              <span className="font-mono font-bold text-[#D97706]">
-                                {declination > 0 ? `+${declination}° East` : `${declination}°`}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleUpdateOffset(declination);
-                                markInitialCalibrationCompleted();
-                              }}
-                              className="w-full py-2.5 px-3 bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                            >
-                              <Compass className="w-4 h-4 text-white" />
-                              Apply GPS Declination ({declination > 0 ? `+${declination}°` : `${declination}°`})
-                            </button>
-                          </div>
-                        );
-                      })()}
                     </div>
                   ) : (
                     <div className="p-3 bg-[#FFFBEB] rounded-xl border border-[#FEF3C7] text-xs text-[#8B735B] text-center">

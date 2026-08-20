@@ -22,6 +22,7 @@ import {
   toggleAlertReadOnUserDevice,
   dismissAlertOnUserDevice,
   addAlertToUserDevice,
+  initNativeAndroidPushBridge,
 } from '../utils/pushNotificationManager';
 import { PlacedRoom, PropertyRecord, UserProfile, SubscriptionPlanId, PushNotificationAlert } from '../types';
 import { calculateHouseAudit, playTempleBellChime } from '../utils/vastuUtils';
@@ -438,8 +439,11 @@ export const FlutterAppContainer: React.FC = () => {
   });
 
   useEffect(() => {
-    // Listen to real-time broadcasts from backend, but filter and merge locally for this device
-    const unsub = subscribeToPushAlerts((masterCampaigns) => {
+    // 1. Initialize native Android APK push bridge & remote cap synchronizer
+    const unsubBridge = initNativeAndroidPushBridge();
+
+    // 2. Listen to real-time broadcasts from backend, but filter and merge locally for this device
+    const unsubAlerts = subscribeToPushAlerts((masterCampaigns) => {
       const deviceAlerts = getUserDeviceAlerts(masterCampaigns);
       setPushAlerts(deviceAlerts);
       const highPriUnread = deviceAlerts.find((a) => !a.isRead && a.priority === 'high');
@@ -456,7 +460,8 @@ export const FlutterAppContainer: React.FC = () => {
     window.addEventListener('vastu_trigger_in_app_alert', handleInAppAlert);
 
     return () => {
-      unsub();
+      unsubBridge();
+      unsubAlerts();
       window.removeEventListener('vastu_trigger_in_app_alert', handleInAppAlert);
     };
   }, []);
