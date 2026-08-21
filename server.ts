@@ -673,6 +673,81 @@ ${roomsSummary}`;
   }
 });
 
+  // App Info, OTA Updates, and Release Timeline Backend API
+  app.get('/api/app-info', (_req, res) => {
+    res.json({
+      status: 'ok',
+      appName: 'Vastu Compass',
+      currentVersion: 'v3.2.5',
+      buildNumber: '325',
+      releaseDate: 'August 21, 2026',
+      otaChannel: 'production',
+      bundleUrl: '/dist',
+      timeline: [
+        {
+          version: 'v3.2.5',
+          buildNumber: '325',
+          releaseDate: 'August 21, 2026',
+          title: 'OTA Live Asset Sync & High-Precision Calibration',
+          type: 'major',
+          highlights: [
+            'Over-The-Air (OTA) Asset Sync engine for instant web/app bundle synchronization without Play Store APK re-compilation.',
+            'Pulsing Calibration Required real-time sensor prompt for magnetic distortion recovery.',
+            'Relocated zero offset reset to top right header bar for quick access during physical site inspections.',
+            'Unified consistent Vastu Compass branding across Android Manifest, Capacitor configs, and Firebase collections.',
+          ],
+        },
+        {
+          version: 'v3.2.0',
+          buildNumber: '320',
+          releaseDate: 'August 12, 2026',
+          title: 'Vedic 16-Zone Energy Engine & Dual Multi-Currency Checkout',
+          type: 'feature',
+          highlights: [
+            'Full 16-Zone Devata & Limb energy mapping with cardinal haptic locks.',
+            'Google Pay UPI and international PayPal direct checkout integration.',
+            'Interactive Vastu Mandala popup viewer and offline audit storage.',
+          ],
+        },
+        {
+          version: 'v3.1.0',
+          buildNumber: '310',
+          releaseDate: 'July 28, 2026',
+          title: 'House Audit Reference #RPT Generator & Offline Mode',
+          type: 'feature',
+          highlights: [
+            'Automated Unique Audit Reference (#RPT) generation with cloud sync.',
+            'Pancha Mahabhuta elemental weight calculations.',
+          ],
+        },
+        {
+          version: 'v3.0.0',
+          buildNumber: '300',
+          releaseDate: 'July 10, 2026',
+          title: 'Native Android Magnetometer & Sensor Calibration Suite',
+          type: 'initial',
+          highlights: [
+            'Real-time magnetometer fusion with exponential smoothing filters.',
+            'Sensor 8-loop calibration guide & Quick-Zero physical facing offset.',
+          ],
+        },
+      ],
+    });
+  });
+
+  // OTA Live Manifest Check
+  app.get('/api/ota/manifest', (_req, res) => {
+    res.json({
+      latestVersion: 'v3.2.5',
+      buildNumber: 325,
+      channel: 'production',
+      mandatory: false,
+      releaseNotes: 'Vastu Compass v3.2.5 with live OTA update sync support.',
+      downloadUrl: '/dist/assets/',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   // Vite middleware for development vs production static assets
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

@@ -656,6 +656,15 @@ export const restoreUserPurchases = async (
   return { restored: false, count: 0 };
 };
 
+export interface AppTimelineEntry {
+  version: string;
+  buildNumber: string;
+  releaseDate: string;
+  title: string;
+  type?: 'major' | 'feature' | 'patch' | 'initial';
+  highlights: string[];
+}
+
 // Interface for App Legal & Info Config
 export interface AppLegalAndInfoConfig {
   privacyPolicy: {
@@ -671,6 +680,7 @@ export interface AppLegalAndInfoConfig {
     releaseDate: string;
     externalUrl: string;
     improvements: string[];
+    timeline?: AppTimelineEntry[];
     description: string;
     developerInfo: string;
   };
@@ -713,24 +723,74 @@ Disclaimer:
 This is a spiritual practice, not a commercial product. By placing an order, you acknowledge that it is created as part of a sacred sadhana and accept that no legal disputes or claims will be entertained in any court of law.`,
   },
   appInfo: {
-    title: 'Vedic Vastu Compass & House Auditor Platform',
+    title: 'Vastu Compass • Vedic Spatial Harmony Platform',
     version: 'v3.2.5',
-    buildNumber: '2026.08.12',
-    releaseDate: 'August 12, 2026',
+    buildNumber: '325',
+    releaseDate: 'August 21, 2026',
     externalUrl: 'https://vastucompass.app/release-notes-v3-2-5',
     improvements: [
-      '🧭 Real-Time Compass Sensor Feedback Engine: Live orientation magnetometer feedback, degree calibration offsets, and current GPS location & coordinate alignments.',
-      '🪟 Interactive Popup Overlays: Full-screen Vastu Mandala visualizer popup, 16-Zone Deity & Limb detail cards, calibration modal, property manager, and audit report popups.',
-      '📱 Centered & Responsive Screen Sizing: Optimized multi-column landscape layout, bounded max-width containers, and single-finger touch target buttons.',
-      '📋 Unique Audit Report Reference Number (#RPT) auto-saved locally and synced to backend.',
+      '🚀 Over-The-Air (OTA) Asset Sync Engine: Live background bundle update compatibility with Capacitor / Android WebView.',
+      '🧭 Real-Time Compass Sensor Feedback Engine: Magnetometer orientation smoothing, zero offset presets, and directional alignment chimes.',
+      '⚠️ Interactive Calibration Prompt: Real-time sensor health detector highlighting when figure-8 device calibration is required.',
+      '🪟 Interactive Popup Overlays: Full-screen Vastu Mandala visualizer, 16-Zone Deity & Limb detail cards, and audit reports.',
+      '📱 Centered & Responsive Mobile Layout: Single-finger touch ergonomics, bounded containers, and portrait/landscape adaptation.',
+      '📋 Unique Audit Report Reference Number (#RPT) with instant cloud syncing.',
       '🤖 Instant AI Vastu Guru Assistant with context-aware room and elemental balance guidance.',
-      '🚀 Upgraded Admin Dashboard with real-time audit report logs, user management, and policy content manager.',
-      '⚡ 45% reduction in initial bundle size and improved offline compass caching.',
+      '⚡ 45% reduction in initial bundle size and instant offline compass caching.',
+    ],
+    timeline: [
+      {
+        version: 'v3.2.5',
+        buildNumber: '325',
+        releaseDate: 'August 21, 2026',
+        title: 'OTA Live Asset Sync & High-Precision Calibration',
+        type: 'major',
+        highlights: [
+          'Over-The-Air (OTA) Live Asset Sync for instant web asset updates on mobile devices.',
+          'Pulsing Calibration Required real-time sensor prompt for magnetic distortion recovery.',
+          'Relocated zero offset reset to top right header bar for quick access.',
+          'Unified consistent Vastu Compass branding across Android Manifest and Capacitor configs.',
+        ],
+      },
+      {
+        version: 'v3.2.0',
+        buildNumber: '320',
+        releaseDate: 'August 12, 2026',
+        title: 'Vedic 16-Zone Energy Engine & Dual Multi-Currency Checkout',
+        type: 'feature',
+        highlights: [
+          'Full 16-Zone Devata & Limb energy mapping with cardinal haptic locks.',
+          'Google Pay UPI and international PayPal direct checkout integration.',
+          'Interactive Vastu Mandala popup viewer and offline audit storage.',
+        ],
+      },
+      {
+        version: 'v3.1.0',
+        buildNumber: '310',
+        releaseDate: 'July 28, 2026',
+        title: 'House Audit Reference #RPT Generator & Offline Storage',
+        type: 'feature',
+        highlights: [
+          'Automated Unique Audit Reference (#RPT) generation with cloud sync.',
+          'Pancha Mahabhuta elemental weight calculations.',
+        ],
+      },
+      {
+        version: 'v3.0.0',
+        buildNumber: '300',
+        releaseDate: 'July 10, 2026',
+        title: 'Native Android Magnetometer & Sensor Calibration Suite',
+        type: 'initial',
+        highlights: [
+          'Real-time magnetometer fusion with exponential smoothing filters.',
+          'Sensor 8-loop calibration guide & Quick-Zero physical facing offset.',
+        ],
+      },
     ],
     description:
-      'Vedic Vastu Compass is an advanced spatial energy analysis tool combining ancient Indian Vastu Shastra principles with modern magnetometer orientation sensors, interactive popup overlays, responsive screen sizing, and AI technology.',
+      'Vastu Compass is an advanced spatial energy analysis tool combining ancient Indian Vastu Shastra principles with modern magnetometer orientation sensors, interactive popup overlays, responsive screen sizing, and AI technology.',
     developerInfo:
-      'Engineered with React, TypeScript, Tailwind CSS, Lucide Icons, and Offline-First Local Storage Engine.',
+      'Engineered with React, TypeScript, Tailwind CSS, Lucide Icons, Capacitor Android Native Runtime, and Offline-First Local Storage Engine.',
   },
 };
 

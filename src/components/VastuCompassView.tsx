@@ -549,9 +549,23 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
 
         {/* Degree Header & Current Zone */}
         <div className="text-center z-10">
-          <div className="inline-flex items-center justify-center gap-2 px-4 py-1.5 rounded-full bg-[#F3EFE0] text-[#78350F] text-xs font-sans font-semibold mb-1 border border-[#E8DCC4] shadow-2xs">
+          <div className="inline-flex flex-wrap items-center justify-center gap-2 px-4 py-1.5 rounded-full bg-[#F3EFE0] text-[#78350F] text-xs font-sans font-semibold mb-1 border border-[#E8DCC4] shadow-2xs">
             <span className="w-2 h-2 rounded-full bg-[#D97706] animate-ping" />
-            Facing Angle: <span className="font-bold text-[#3D342D] text-sm">{effectiveDegree}°</span>
+            <span>Facing Angle: <strong className="text-[#3D342D] text-sm">{effectiveDegree}°</strong></span>
+            {(sensorHealth === 'needs_calibration' || needsCalibrationPrompt || !isInitialCalibrationDone) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCalibrationTab('guide');
+                  setIsCalibrationModalOpen(true);
+                  playTempleBellChime();
+                }}
+                className="text-[10px] text-[#DC2626] font-extrabold bg-[#FEF2F2] px-2 py-0.5 rounded-full border border-[#FCA5A5] flex items-center gap-1 hover:bg-[#FEE2E2] transition-colors cursor-pointer animate-pulse"
+                title="Tap to calibrate device compass"
+              >
+                <AlertTriangle className="w-3 h-3 text-[#DC2626]" /> Calibration Required
+              </button>
+            )}
           </div>
           <p className="text-xs font-sans font-medium text-[#8B735B] flex items-center justify-center gap-2 mt-1">
             <span>Deity: <strong className="text-[#3D342D]">{currentZone.deity}</strong></span>

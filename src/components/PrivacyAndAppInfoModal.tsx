@@ -10,6 +10,10 @@ import {
   Calendar,
   Layers,
   Lock,
+  History,
+  Radio,
+  RefreshCw,
+  Smartphone,
 } from 'lucide-react';
 import {
   AppLegalAndInfoConfig,
@@ -217,15 +221,52 @@ export const PrivacyAndAppInfoModal: React.FC<PrivacyAndAppInfoModalProps> = ({
                     <Calendar className="w-3.5 h-3.5 text-[#F59E0B]" /> Released: {config.appInfo.releaseDate}
                   </span>
                   <span className="flex items-center gap-1">
-                    <Code2 className="w-3.5 h-3.5 text-[#F59E0B]" /> Architecture: Web SPA / Cloud Run
+                    <Smartphone className="w-3.5 h-3.5 text-[#F59E0B]" /> Runtime: Android Native APK (Capacitor)
                   </span>
+                  <span className="flex items-center gap-1">
+                    <Radio className="w-3.5 h-3.5 text-[#10B981]" /> Live OTA Sync: Active
+                  </span>
+                </div>
+              </div>
+
+              {/* Over-The-Air (OTA) Live Asset Sync Channel Banner */}
+              <div className="bg-gradient-to-r from-[#065F46] to-[#047857] text-white p-4 rounded-2xl border border-[#059669] shadow-xs space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 bg-white/10 rounded-lg">
+                      <Radio className="w-4 h-4 text-[#A7F3D0] animate-pulse" />
+                    </span>
+                    <div>
+                      <h5 className="font-bold text-xs text-white">Over-The-Air (OTA) Live Asset Sync</h5>
+                      <p className="text-[10px] text-[#A7F3D0]">Live web bundle synchronization enabled for Android APK</p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 bg-white/20 text-[#ECFDF5] text-[10px] font-mono font-bold rounded-full">
+                    OTA Channel: Production
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-[11px] text-[#ECFDF5]/90 border-t border-white/10">
+                  <div className="bg-white/10 px-2.5 py-1.5 rounded-lg">
+                    <span className="block text-[9px] text-[#A7F3D0] uppercase font-bold">Bundle Version</span>
+                    <span className="font-mono font-bold">{config.appInfo.version} ({config.appInfo.buildNumber})</span>
+                  </div>
+                  <div className="bg-white/10 px-2.5 py-1.5 rounded-lg">
+                    <span className="block text-[9px] text-[#A7F3D0] uppercase font-bold">OTA Status</span>
+                    <span className="font-semibold flex items-center gap-1 text-[#34D399]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#34D399] animate-ping" /> In Sync
+                    </span>
+                  </div>
+                  <div className="bg-white/10 px-2.5 py-1.5 rounded-lg col-span-2 sm:col-span-1">
+                    <span className="block text-[9px] text-[#A7F3D0] uppercase font-bold">Target Platform</span>
+                    <span className="font-semibold">Android 5.0+ (API 22-34)</span>
+                  </div>
                 </div>
               </div>
 
               {/* Version Improvements & Highlights */}
               <div className="bg-white p-5 rounded-2xl border border-[#E8DCC4] space-y-3">
                 <h5 className="font-serif font-bold text-xs uppercase tracking-wider text-[#78350F] flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-[#D97706]" /> Recent Version Improvements & Changelog
+                  <Sparkles className="w-4 h-4 text-[#D97706]" /> Recent Version Improvements ({config.appInfo.version})
                 </h5>
                 <div className="space-y-2">
                   {config.appInfo.improvements?.map((imp, idx) => (
@@ -236,6 +277,51 @@ export const PrivacyAndAppInfoModal: React.FC<PrivacyAndAppInfoModalProps> = ({
                   ))}
                 </div>
               </div>
+
+              {/* Release History Timeline */}
+              {config.appInfo.timeline && config.appInfo.timeline.length > 0 && (
+                <div className="bg-white p-5 rounded-2xl border border-[#E8DCC4] space-y-3">
+                  <h5 className="font-serif font-bold text-xs uppercase tracking-wider text-[#78350F] flex items-center gap-1.5">
+                    <History className="w-4 h-4 text-[#D97706]" /> Release History & Version Timeline
+                  </h5>
+                  <div className="space-y-3 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-[#E8DCC4]">
+                    {config.appInfo.timeline.map((entry, idx) => (
+                      <div key={idx} className="relative flex items-start gap-3 pl-1">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 z-10 ${
+                          idx === 0
+                            ? 'bg-[#D97706] text-white ring-4 ring-[#FEF3C7]'
+                            : 'bg-[#E8DCC4] text-[#78350F]'
+                        }`}>
+                          <span className="text-[10px] font-bold">{entry.version.replace('v', '')}</span>
+                        </div>
+                        <div className="flex-1 bg-[#FAF7F2] p-3 rounded-xl border border-[#E8DCC4] space-y-1.5">
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-xs text-[#78350F]">{entry.title}</span>
+                              <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded ${
+                                entry.type === 'major'
+                                  ? 'bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]'
+                                  : 'bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0]'
+                              }`}>
+                                {entry.version}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-[#8B735B] font-medium">{entry.releaseDate}</span>
+                          </div>
+                          <ul className="space-y-1 pt-1">
+                            {entry.highlights.map((h, hIdx) => (
+                              <li key={hIdx} className="text-[11px] text-[#5C4D3C] flex items-start gap-1.5">
+                                <span className="text-[#D97706] mt-0.5 font-bold">•</span>
+                                <span>{h}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Tech Stack Specs */}
               <div className="bg-white p-4 rounded-2xl border border-[#E8DCC4] space-y-2">
