@@ -18,7 +18,7 @@ declare global {
 export const AdSenseUnit: React.FC<AdSenseUnitProps> = ({
   slotId = 'vastu-ad-slot-101',
   format = 'banner',
-  publisherId = 'ca-pub-7tasker-vastu-9921',
+  publisherId = 'ca-pub-vastu-compass-9921',
   className = '',
 }) => {
   const [adLoaded, setAdLoaded] = useState<boolean>(false);

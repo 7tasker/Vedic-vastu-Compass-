@@ -511,11 +511,11 @@ export const FlutterAppContainer: React.FC = () => {
   // Perform Auto-Geotag on Launch & Check Intro Screen configuration
   useEffect(() => {
     // Background Auto-Geotag
-    performAutoGeotag(userProfile.email || 'guest@7tasker.com', userProfile.name);
+    performAutoGeotag(userProfile.email || 'guest@vastucompass.app', userProfile.name);
 
     // Check system settings for App Intro Onboarding Modal
     const sys = getSystemSettings();
-    const hasSeenIntro = localStorage.getItem('7tasker_vastu_intro_seen');
+    const hasSeenIntro = localStorage.getItem('vastu_intro_seen');
     if (sys.showIntroOnLaunch && !hasSeenIntro) {
       setIsAppIntroOpen(true);
     }
@@ -1261,7 +1261,7 @@ export const FlutterAppContainer: React.FC = () => {
           planId={selectedPlanForRazorpay}
           user={{
             uid: userProfile.uid,
-            email: userProfile.email || 'user@7tasker.com',
+            email: userProfile.email || 'user@vastucompass.app',
             name: userProfile.name || 'Vedic Architect',
           }}
           onSuccess={handlePaymentSuccess}
@@ -1290,7 +1290,7 @@ export const FlutterAppContainer: React.FC = () => {
           isOpen={isAppIntroOpen}
           onClose={() => {
             setIsAppIntroOpen(false);
-            localStorage.setItem('7tasker_vastu_intro_seen', 'true');
+            localStorage.setItem('vastu_intro_seen', 'true');
           }}
           screens={getIntroScreens()}
           appName={getSystemSettings().appName}

@@ -2,7 +2,13 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
+import { initializeNativeApp } from './utils/nativeAuth.ts';
 import './index.css';
+
+// Initialize native Capacitor device capabilities (StatusBar, SplashScreen, GoogleAuth)
+initializeNativeApp().catch((err) => {
+  console.warn('Native bootstrap note:', err);
+});
 
 // Handle generic cross-origin script errors gracefully
 if (typeof window !== 'undefined') {

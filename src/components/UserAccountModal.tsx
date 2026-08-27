@@ -3,9 +3,12 @@ import { UserProfile, SubscriptionPlanId } from '../types';
 import { SUBSCRIPTION_PLANS } from '../data/vastuData';
 import { playTempleBellChime } from '../utils/vastuUtils';
 import { redeemLicenseKey } from '../utils/licenseKeyManager';
+import { Capacitor } from '@capacitor/core';
+import { performNativeGoogleSignIn } from '../utils/nativeAuth';
 import {
   auth,
   googleProvider,
+  signInWithGoogleCredential,
   syncUserProfileToFirestore,
   getUserPurchaseHistory,
   restoreUserPurchases,
@@ -231,17 +234,89 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
 
   const isAdminUser = user.role === 'admin' || isAdminEmail(user.email);
 
-  // Google Sign-In Handler
+  // Google Sign-In Handler (Native @codetrix-studio/capacitor-google-auth on Android, web popup on desktop)
   const handleGoogleSignIn = async () => {
     setIsAuthLoading(true);
     setAuthError('');
-    const inputEmail = (emailInput || '').trim().toLowerCase();
 
     try {
+      // 1. If running in Native Android APK (Capacitor), strictly use Native Google Auth without web popups
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const nativeUser = await performNativeGoogleSignIn();
+          if (nativeUser && (nativeUser.idToken || nativeUser.email)) {
+            let fbUser: any = null;
+            if (nativeUser.idToken) {
+              try {
+                const authResult = await signInWithGoogleCredential(auth, nativeUser.idToken);
+                fbUser = authResult?.user;
+              } catch (credErr) {
+                console.warn('Firebase credential exchange note:', credErr);
+              }
+            }
+
+            const userEmail = fbUser?.email || nativeUser.email || '';
+            if (!userEmail) {
+              setAuthError('Unable to retrieve email from Google Account.');
+              setIsAuthLoading(false);
+              return;
+            }
+
+            let dbProfile: any = {};
+            if (fbUser) {
+              try {
+                dbProfile = await syncUserProfileToFirestore(fbUser);
+              } catch (syncErr) {
+                console.warn('Firestore sync note:', syncErr);
+              }
+            }
+
+            const isGoogleAdmin = isAdminEmail(userEmail) || dbProfile.role === 'admin';
+
+            resetFailedLoginAttempts(userEmail);
+            recordSecurityAuditLog({
+              action: 'login_google_success',
+              userEmail: userEmail,
+              details: `Native Android Google Auth success. Device Bound: ${getDeviceId()}`,
+            });
+
+            onUpdateUser({
+              uid: fbUser?.uid || nativeUser.id || 'usr_' + Date.now(),
+              name: nativeUser.name || fbUser?.displayName || dbProfile.name || (isGoogleAdmin ? 'Satish Pasala (Admin)' : 'Vedic Explorer'),
+              email: userEmail,
+              role: isGoogleAdmin ? 'admin' : (dbProfile.role || 'user'),
+              isLoggedIn: true,
+              isProMember: isGoogleAdmin ? true : (dbProfile.isProMember ?? false),
+              activePlan: (dbProfile.activePlan as SubscriptionPlanId) || 'lifetime_pro',
+            });
+
+            playTempleBellChime();
+            setIsAuthLoading(false);
+            onClose();
+
+            if (isGoogleAdmin && onOpenAdminPanel) {
+              onOpenAdminPanel();
+            }
+            return;
+          }
+        } catch (nativeErr: any) {
+          console.warn('Native Google Auth error:', nativeErr);
+          if (nativeErr?.message?.includes('cancelled') || nativeErr?.code === '12501') {
+            setAuthError('Google sign-in was cancelled.');
+            setIsAuthLoading(false);
+            return;
+          }
+          setAuthError(nativeErr?.message || 'Google sign-in failed.');
+          setIsAuthLoading(false);
+          return;
+        }
+      }
+
+      // 2. Web popup mode for desktop/browser preview
       const result = await signInWithPopup(auth, googleProvider);
       if (result?.user) {
         const fbUser = result.user;
-        const userEmail = fbUser.email || inputEmail || 'admin@7tasker.com';
+        const userEmail = fbUser.email || '';
 
         let dbProfile: any = {};
         try {
@@ -261,12 +336,12 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
 
         onUpdateUser({
           uid: fbUser.uid,
-          name: fbUser.displayName || dbProfile.name || (isGoogleAdmin ? 'Admin Architect' : 'Vedic Explorer'),
+          name: fbUser.displayName || dbProfile.name || (isGoogleAdmin ? 'Satish Pasala (Admin)' : 'Vedic Explorer'),
           email: userEmail,
           role: isGoogleAdmin ? 'admin' : dbProfile.role || 'user',
           isLoggedIn: true,
           isProMember: isGoogleAdmin ? true : (dbProfile.isProMember ?? false),
-          activePlan: dbProfile.activePlan as SubscriptionPlanId,
+          activePlan: (dbProfile.activePlan as SubscriptionPlanId) || 'lifetime_pro',
         });
 
         playTempleBellChime();
@@ -279,41 +354,11 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       }
     } catch (err: any) {
       logFirebaseAuthDiagnostic(err, 'handleGoogleSignIn');
-
-      if (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment') {
-        try {
-          await signInWithRedirect(auth, googleProvider);
-          return;
-        } catch (redirectErr) {
-          console.warn('Google Auth redirect error:', redirectErr);
-        }
-      }
-
+      setIsAuthLoading(false);
       if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
         setAuthError('Google sign-in was cancelled.');
-        setIsAuthLoading(false);
-        return;
-      }
-
-      // Resilient fallback sign-in if iframe popups are constrained
-      const fallbackEmail = inputEmail || 'admin@7tasker.com';
-      const isGoogleAdmin = isAdminEmail(fallbackEmail);
-
-      onUpdateUser({
-        uid: 'google_user_' + String(fallbackEmail).replace(/[^a-zA-Z0-9]/g, '_'),
-        name: isGoogleAdmin ? 'Admin Architect' : (nameInput || 'Vedic Explorer'),
-        email: fallbackEmail,
-        role: isGoogleAdmin ? 'admin' : 'user',
-        isLoggedIn: true,
-        isProMember: true,
-      });
-
-      playTempleBellChime();
-      setIsAuthLoading(false);
-      onClose();
-
-      if (isGoogleAdmin && onOpenAdminPanel) {
-        onOpenAdminPanel();
+      } else {
+        setAuthError(err?.message || 'Google sign-in failed.');
       }
     }
   };
@@ -334,7 +379,6 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       return;
     }
 
-    // Always clear failed login locks on submit attempt
     resetFailedLoginAttempts(email);
 
     if (authMode === 'signin') {
@@ -344,50 +388,18 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       }
 
       setIsAuthLoading(true);
-      const isAdmin = isAdminEmail(email);
 
-      // Admin Instant Bypass Guarantee
-      if (isAdmin) {
-        try {
-          const userCredential = await signInWithEmailAndPassword(auth, email, password);
-          const fbUser = userCredential.user;
-          const dbProfile = await syncUserProfileToFirestore(fbUser);
-          onUpdateUser({
-            uid: fbUser.uid,
-            name: 'Admin Architect',
-            email: email,
-            role: 'admin',
-            isLoggedIn: true,
-            isProMember: true,
-          });
-        } catch {
-          // Fallback Admin
-          onUpdateUser({
-            name: 'Admin Architect',
-            email: email,
-            role: 'admin',
-            isLoggedIn: true,
-            isProMember: true,
-          });
-        }
-        playTempleBellChime();
-        setIsAuthLoading(false);
-        setPasswordInput('');
-        if (onOpenAdminPanel) {
-          onClose();
-          onOpenAdminPanel();
-        }
-        return;
-      }
-
-      // Standard User Sign-In Flow
       try {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const fbUser = userCredential.user;
         let dbProfile: any = {};
         try {
           dbProfile = await syncUserProfileToFirestore(fbUser);
-        } catch {}
+        } catch (syncErr) {
+          console.warn('Firestore sync note:', syncErr);
+        }
+
+        const isUserAdmin = isAdminEmail(fbUser.email || email) || dbProfile.role === 'admin';
 
         recordSecurityAuditLog({
           action: 'login_success',
@@ -395,15 +407,15 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
           details: `Email login successful. Device bound: ${getDeviceId()}`,
         });
 
-        const derivedName = dbProfile.name || (email.includes('@') ? email.split('@')[0] : email) || name || 'Vedic Explorer';
+        const derivedName = dbProfile.name || (email.includes('@') ? email.split('@')[0] : email) || name || (isUserAdmin ? 'Satish Pasala (Admin)' : 'Vedic Explorer');
 
         onUpdateUser({
           uid: fbUser.uid,
           name: derivedName,
-          email: dbProfile.email || email,
-          role: dbProfile.role || 'user',
+          email: dbProfile.email || fbUser.email || email,
+          role: isUserAdmin ? 'admin' : (dbProfile.role || 'user'),
           isLoggedIn: true,
-          isProMember: true,
+          isProMember: isUserAdmin ? true : (dbProfile.isProMember ?? false),
           activePlan: (dbProfile.activePlan as SubscriptionPlanId) || 'lifetime_pro',
         });
 
@@ -411,24 +423,26 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
         setIsAuthLoading(false);
         setPasswordInput('');
         onClose();
+
+        if (isUserAdmin && onOpenAdminPanel) {
+          onOpenAdminPanel();
+        }
       } catch (fbErr: any) {
         logFirebaseAuthDiagnostic(fbErr, 'handleLoginSubmit');
-
-        const derivedName = (email.includes('@') ? email.split('@')[0] : email) || name || 'Vedic Explorer';
-
-        // Fallback resilient local sign in
-        onUpdateUser({
-          uid: 'user_' + String(email).replace(/[^a-zA-Z0-9]/g, '_'),
-          name: derivedName,
-          email: email,
-          role: 'user',
-          isLoggedIn: true,
-          isProMember: true,
-        });
-        playTempleBellChime();
+        let errorMsg = 'Invalid email or password. Please verify your credentials.';
+        if (fbErr?.code === 'auth/user-not-found') {
+          errorMsg = 'No account found with this email. Please switch to Create Account.';
+        } else if (fbErr?.code === 'auth/wrong-password' || fbErr?.code === 'auth/invalid-credential') {
+          errorMsg = 'Incorrect password entered. Please try again.';
+        } else if (fbErr?.code === 'auth/invalid-email') {
+          errorMsg = 'The email address format is invalid.';
+        } else if (fbErr?.code === 'auth/too-many-requests') {
+          errorMsg = 'Too many failed login attempts. Please try again later.';
+        } else if (fbErr?.message) {
+          errorMsg = fbErr.message;
+        }
+        setAuthError(errorMsg);
         setIsAuthLoading(false);
-        setPasswordInput('');
-        onClose();
       }
     } else if (authMode === 'signup') {
       if (!password || password.length < 6) {
@@ -448,6 +462,8 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
           registerPhoneHash(phone, fbUser.uid);
         }
 
+        const isUserAdmin = isAdmin || dbProfile.role === 'admin';
+
         recordSecurityAuditLog({
           action: 'account_created',
           userEmail: email,
@@ -458,9 +474,9 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
           uid: fbUser.uid,
           name: dbProfile.name || name,
           email: dbProfile.email || email,
-          role: isAdmin ? 'admin' : (dbProfile.role || 'user'),
+          role: isUserAdmin ? 'admin' : (dbProfile.role || 'user'),
           isLoggedIn: true,
-          isProMember: isAdmin || dbProfile.isProMember || false,
+          isProMember: isUserAdmin || dbProfile.isProMember || false,
         });
 
         playTempleBellChime();
@@ -469,35 +485,21 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
         setPhoneInput('');
         onClose();
 
-        if (isAdmin && onOpenAdminPanel) {
+        if (isUserAdmin && onOpenAdminPanel) {
           onOpenAdminPanel();
         }
       } catch (err: any) {
-        console.warn('Firebase registration fallback note:', err);
-        recordSecurityAuditLog({
-          action: 'account_created_local',
-          userEmail: email,
-          details: `Account registered. Device Bound: ${getDeviceId()}`,
-        });
-
-        onUpdateUser({
-          uid: 'user_' + String(email).replace(/[^a-zA-Z0-9]/g, '_'),
-          name: name,
-          email: email,
-          role: isAdmin ? 'admin' : 'user',
-          isLoggedIn: true,
-          isProMember: isAdmin,
-        });
-
-        playTempleBellChime();
-        setIsAuthLoading(false);
-        setPasswordInput('');
-        setPhoneInput('');
-        onClose();
-
-        if (isAdmin && onOpenAdminPanel) {
-          onOpenAdminPanel();
+        console.warn('Firebase registration error:', err);
+        let errorMsg = 'Failed to create account. Please check your details.';
+        if (err?.code === 'auth/email-already-in-use') {
+          errorMsg = 'This email is already registered. Please switch to Sign In.';
+        } else if (err?.code === 'auth/weak-password') {
+          errorMsg = 'Password is too weak. Please use at least 6 characters.';
+        } else if (err?.message) {
+          errorMsg = err.message;
         }
+        setAuthError(errorMsg);
+        setIsAuthLoading(false);
       }
     }
   };
@@ -1132,7 +1134,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                 type="button"
                 disabled={isAuthLoading}
                 onClick={handleGoogleSignIn}
-                className="w-full py-3 px-4 bg-white hover:bg-gray-50 text-[#3C4043] border border-[#DADCE0] text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center gap-2.5"
+                className="w-full py-3 px-4 bg-white hover:bg-gray-50 text-[#3C4043] border border-[#DADCE0] text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path
@@ -1152,7 +1154,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                     d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.28 6.58l4 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
                   />
                 </svg>
-                <span>Sign in with Google</span>
+                <span>{isAuthLoading ? 'Signing In...' : 'Continue with Google'}</span>
               </button>
 
               <div className="relative flex py-1 items-center">

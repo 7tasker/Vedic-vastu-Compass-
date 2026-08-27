@@ -34,7 +34,7 @@ export const DEFAULT_TAX_RECEIPT_CONFIG: TaxReceiptTemplateConfig = {
   taxId: '07AAACV7719K1Z4',
   panOrCin: 'AACPV7719K',
   address: 'Shree Vastu Niketan, Cyber City Tech Hub, Bangalore, Karnataka - 560103, India',
-  supportEmail: 'Admin@7tasker.com',
+  supportEmail: 'admin@vastucompass.app',
   supportPhone: '+91 98765 43210',
   websiteUrl: 'https://vastucompass.app',
   hsnCode: '998314',

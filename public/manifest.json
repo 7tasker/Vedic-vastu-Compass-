@@ -1,0 +1,17 @@
+{
+  "short_name": "Vastu Compass",
+  "name": "Vastu Compass • Vedic Harmony & Inclinometer",
+  "description": "Hindu Vedic Vastu Shastra 16-Zone Digital Compass with 3D Tilt Compensation, Inclinometer Bubble Level & Geomagnetic True North Correction.",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#78350F",
+  "background_color": "#FAF7F2",
+  "orientation": "portrait"
+}

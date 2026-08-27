@@ -1,12 +1,13 @@
 {
   "appName": "Vastu Compass",
-  "version": "3.2.5",
-  "buildDate": "2026-08-12",
+  "version": "3.3.0",
+  "buildDate": "2026-08-24",
   "sensors": {
-    "feedbackEngine": "Magnetometer & Device Orientation",
-    "permissionType": "geolocation",
-    "calibrationMode": "Manual Degree Offset (-180° to +180°) & Current GPS Location Alignment",
-    "liveDegreeUpdateIntervalMs": 100,
+    "feedbackEngine": "3D Tilt-Compensated Magnetometer & Inclinometer Orientation",
+    "permissionType": "geolocation & deviceorientation",
+    "declinationEngine": "Live GPS Geomagnetic Declination (WMM)",
+    "calibrationMode": "Manual Degree Offset (-180° to +180°), True North / Magnetic North Toggle & Current GPS Alignment",
+    "liveDegreeUpdateIntervalMs": 50,
     "vibrationFeedbackOnZoneChange": true
   },
   "popupOverlays": {

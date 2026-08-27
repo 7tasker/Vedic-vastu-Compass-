@@ -316,6 +316,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
 
     // 1. GOOGLE PAY (GPAY) FLOW
     if (selectedGateway === 'gpay') {
+      let gpayHandled = false;
       if (window.google?.payments?.api?.PaymentsClient) {
         try {
           const paymentsClient = new window.google.payments.api.PaymentsClient({
@@ -334,6 +335,9 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
                 },
               },
             ],
+          }).catch((err: any) => {
+            console.warn('isReadyToPay check notice:', err);
+            return { result: false };
           });
 
           if (isReady && isReady.result) {
@@ -391,6 +395,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
             const paymentId = result?.paymentId || `pay_gpay_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
             const orderId = result?.orderId || `order_gpay_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
             await finalizePayment(paymentId, orderId, 'gpay');
+            gpayHandled = true;
             return;
           }
         } catch (gpayErr: any) {
@@ -401,9 +406,11 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
           console.warn('Direct Google Pay Web API notice:', gpayErr);
         }
       }
-      setIsLoading(false);
-      setShowGPayModal(true);
-      return;
+      if (!gpayHandled) {
+        setIsLoading(false);
+        setShowGPayModal(true);
+        return;
+      }
     }
 
     // 2. PAYPAL FLOW

@@ -61,9 +61,9 @@ interface AdminUserProfilesTabProps {
 // Default initial mock dataset with rich tied address records for immediate realistic display
 export const DEFAULT_USER_PROFILES_WITH_ADDRESSES: UserDbProfile[] = [
   {
-    uid: 'usr_7tasker_admin',
-    email: 'admin@7tasker.com',
-    name: '7tasker',
+    uid: 'usr_vastu_admin_01',
+    email: 'admin@vastucompass.app',
+    name: 'Satish Pasala (Admin)',
     phone: '+91 9876543210',
     role: 'admin',
     isProMember: true,
@@ -73,7 +73,7 @@ export const DEFAULT_USER_PROFILES_WITH_ADDRESSES: UserDbProfile[] = [
     lastLoginAt: '2026-08-20T10:30:00.000Z',
     savedProperties: [
       {
-        id: 'prop_7tasker_01',
+        id: 'prop_vastu_01',
         name: 'Lotus Grandeur Suite 502',
         address: 'Flat 502, 5th Floor, Royal Palms, Outer Ring Rd, Marathahalli, Bengaluru, Karnataka 560037',
         addressType: 'manual',
@@ -86,15 +86,15 @@ export const DEFAULT_USER_PROFILES_WITH_ADDRESSES: UserDbProfile[] = [
           { id: 'r74', roomType: 'master_bedroom', degree: 225, zoneCode: 'SW', customLabel: 'Nairutya Master Bedroom' },
         ],
         createdAt: '2026-08-15T10:00:00.000Z',
-        userId: 'usr_7tasker_admin',
-        userName: '7tasker',
-        userEmail: 'admin@7tasker.com',
+        userId: 'usr_vastu_admin_01',
+        userName: 'Satish Pasala (Admin)',
+        userEmail: 'admin@vastucompass.app',
         userPhone: '+91 9876543210',
         paymentReceiptNo: 'REC-2026-78210',
         paymentStatus: 'paid',
         paymentAmount: 1499,
         paymentCurrency: 'INR',
-        paymentGateway: 'Razorpay (pay_7tasker_99182)',
+        paymentGateway: 'Razorpay (pay_vastu_99182)',
         paymentDate: '2026-08-15 10:15 AM',
         vastuReportNumber: 'RPT-2026-286153',
         reportRefNumber: 'RPT-2026-286153',

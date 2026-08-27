@@ -1,11 +1,11 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.seventasker.vastucompass"
+    namespace "vedic.vastu.compass"
     compileSdkVersion 34
     
     defaultConfig {
-        applicationId "com.seventasker.vastucompass"
+        applicationId "vedic.vastu.compass"
         minSdkVersion 22
         targetSdkVersion 34
         versionCode 325
@@ -37,3 +37,5 @@ dependencies {
     implementation 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
     implementation 'androidx.core:core-splashscreen:1.0.1'
 }
+
+apply plugin: 'com.google.gms.google-services'

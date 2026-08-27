@@ -2,6 +2,8 @@
 <resources>
     <string name="app_name">Vastu Compass</string>
     <string name="title_activity_main">Vastu Compass</string>
-    <string name="package_name">com.seventasker.vastucompass</string>
+    <string name="package_name">vedic.vastu.compass</string>
     <string name="custom_url_scheme">vastucompass</string>
+    <string name="server_client_id">87203320531-nlb6h8rjmdhg4uilkd1so67h4pr6ieum.apps.googleusercontent.com</string>
+    <string name="default_web_client_id">87203320531-nlb6h8rjmdhg4uilkd1so67h4pr6ieum.apps.googleusercontent.com</string>
 </resources>

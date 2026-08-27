@@ -6,6 +6,15 @@ import { RangoliCompassBackground } from './RangoliCompassBackground';
 import { LotusRoomBoxBackground } from './LotusRoomBoxBackground';
 import { RoomSelectorModal, getRoomIconComponent } from './RoomSelectorModal';
 import {
+  calculateTiltCompensatedHeading,
+  calculateGeomagneticDeclination,
+  formatCoordinatesToDMS,
+  getBubbleLevelOffset,
+  evaluateMagneticFieldStatus,
+  get16CardinalFromDegree,
+  CARDINAL_POINTS_16,
+} from '../utils/compassSensorLogic';
+import {
   Compass,
   RotateCcw,
   Sparkles,
@@ -32,6 +41,9 @@ import {
   ChevronDown,
   Plus,
   LayoutGrid,
+  Layers,
+  CircleDot,
+  Radio,
 } from 'lucide-react';
 
 interface VastuCompassViewProps {
@@ -39,19 +51,6 @@ interface VastuCompassViewProps {
   onDegreeChange: (deg: number) => void;
   onAddRoomWithDegree?: (roomType: string, deg: number, customLabel?: string) => void;
   isActive?: boolean;
-}
-
-/**
- * Calculate approximate geomagnetic declination based on latitude & longitude.
- * For Indian coordinates (lat 8..37, lng 68..97), declination ranges from ~+0.5° to +2.5° East.
- */
-export function calculateMagneticDeclination(lat: number, lng: number): number {
-  if (lat >= 8 && lat <= 38 && lng >= 68 && lng <= 98) {
-    const dec = 0.5 + ((lng - 68) / 30) * 1.5;
-    return Number(dec.toFixed(1));
-  }
-  const dec = Math.sin((lat * Math.PI) / 180) * Math.cos((lng * Math.PI) / 180) * 3;
-  return Number(dec.toFixed(1));
 }
 
 export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
@@ -67,6 +66,30 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
   const [sensorPermissionDenied, setSensorPermissionDenied] = useState(false);
   const [selectedRoomToTest, setSelectedRoomToTest] = useState<string>('kitchen');
   const [isRoomPickerModalOpen, setIsRoomPickerModalOpen] = useState<boolean>(false);
+
+  // Mode: True North (Geographic) vs Magnetic North (as in Digital Compass apps)
+  const [useTrueNorth, setUseTrueNorth] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('vastudrishti_use_true_north') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Tilt Compensation Toggle
+  const [isTiltCompensationEnabled, setIsTiltCompensationEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('vastudrishti_tilt_compensation');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  // Real-time Device Inclinometer (Pitch & Roll) State
+  const [devicePitch, setDevicePitch] = useState<number>(0);
+  const [deviceRoll, setDeviceRoll] = useState<number>(0);
+  const [isLevelModeOpen, setIsLevelModeOpen] = useState<boolean>(false);
 
   // First Installation Calibration check
   const [isInitialCalibrationDone, setIsInitialCalibrationDone] = useState<boolean>(() => {
@@ -91,6 +114,8 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
   const [userLocation, setUserLocation] = useState<{
     latitude: number;
     longitude: number;
+    altitude?: number | null;
+    speed?: number | null;
     city?: string;
     country?: string;
     accuracy?: number;
@@ -115,12 +140,14 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
     setLocationError(null);
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
+        const { latitude, longitude, accuracy, altitude, speed } = position.coords;
         const locData = {
           latitude: Number(latitude.toFixed(6)),
           longitude: Number(longitude.toFixed(6)),
+          altitude: altitude !== null && altitude !== undefined ? Math.round(altitude) : null,
+          speed: speed !== null && speed !== undefined ? Number((speed * 3.6).toFixed(1)) : null, // km/h
           accuracy: Math.round(accuracy),
-          city: 'Live GPS Location',
+          city: 'Live GPS Coordinates',
           country: latitude >= 0 ? 'Northern Hemisphere' : 'Southern Hemisphere',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         };
@@ -179,11 +206,34 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
     handleDetectCurrentLocation(true);
   }, [handleDetectCurrentLocation]);
 
+  // Calculate local geomagnetic declination from GPS coordinates
+  const magneticDeclination = userLocation
+    ? calculateGeomagneticDeclination(userLocation.latitude, userLocation.longitude)
+    : 1.2; // Standard default East declination for South Asia
+
   // Save offset to localStorage
   const handleUpdateOffset = (newOffset: number) => {
     const normalized = Math.round(((newOffset % 360) + 540) % 360) - 180; // keep between -180 and +180
     setCalibrationOffset(normalized);
     localStorage.setItem('vastudrishti_compass_offset', normalized.toString());
+  };
+
+  const toggleTrueNorth = () => {
+    const nextVal = !useTrueNorth;
+    setUseTrueNorth(nextVal);
+    try {
+      localStorage.setItem('vastudrishti_use_true_north', String(nextVal));
+    } catch {}
+    playTempleBellChime();
+  };
+
+  const toggleTiltCompensation = () => {
+    const nextVal = !isTiltCompensationEnabled;
+    setIsTiltCompensationEnabled(nextVal);
+    try {
+      localStorage.setItem('vastudrishti_tilt_compensation', String(nextVal));
+    } catch {}
+    playTempleBellChime();
   };
 
   const markInitialCalibrationCompleted = () => {
@@ -197,9 +247,25 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
     playTempleBellChime();
   };
 
-  // Effective calibrated degree used across all calculations
-  const effectiveDegree = Math.round(((rawDegree + calibrationOffset) % 360 + 360) % 360);
+  // Sensor Health & Accuracy State
+  const [sensorHealth, setSensorHealth] = useState<'high' | 'medium' | 'needs_calibration' | 'manual'>(() => {
+    if (!isInitialCalibrationDone) return 'needs_calibration';
+    const savedMode = localStorage.getItem('vastudrishti_compass_sensor_mode');
+    return savedMode === 'true' ? 'high' : 'manual';
+  });
+  const [sensorAccuracyDeg, setSensorAccuracyDeg] = useState<number | null>(null);
+  const [needsCalibrationPrompt, setNeedsCalibrationPrompt] = useState<boolean>(() => !isInitialCalibrationDone);
+  const [magneticFieldUt, setMagneticFieldUt] = useState<number | null>(null);
+  const [sensorApiType, setSensorApiType] = useState<string>('Standard Sensor');
+
+  // Effective calibrated degree used across all calculations:
+  // Adds True North declination offset when True North mode is selected
+  const declinationOffset = useTrueNorth ? magneticDeclination : 0;
+  const effectiveDegree = Math.round(((rawDegree + calibrationOffset + declinationOffset) % 360 + 360) % 360);
   const currentZone = getZoneFromDegree(effectiveDegree);
+  const currentCardinal16 = get16CardinalFromDegree(effectiveDegree);
+  const bubbleLevel = getBubbleLevelOffset(devicePitch, deviceRoll, 28);
+  const magFieldEvaluation = evaluateMagneticFieldStatus(magneticFieldUt || 45);
 
   // Smooth sub-degree hardware-accelerated visual angle tracking
   const [visualRotationDeg, setVisualRotationDeg] = useState<number>(effectiveDegree);
@@ -207,10 +273,10 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
   const currentVisualAngleRef = useRef<number>(effectiveDegree);
   const animFrameIdRef = useRef<number | null>(null);
 
-  // Synchronize target angle when rawDegree or calibrationOffset changes
+  // Synchronize target angle when rawDegree, calibrationOffset, or True North changes
   useEffect(() => {
-    targetAngleRef.current = ((rawDegree + calibrationOffset) % 360 + 360) % 360;
-  }, [rawDegree, calibrationOffset]);
+    targetAngleRef.current = ((rawDegree + calibrationOffset + declinationOffset) % 360 + 360) % 360;
+  }, [rawDegree, calibrationOffset, declinationOffset]);
 
   // Buttery-smooth 60fps/120fps continuous interpolation loop without 0/360 wrap glitch
   // Pauses automatically when user leaves compass tab and resumes on focus
@@ -242,17 +308,6 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
     };
   }, [isActive, isSensorActive]);
 
-  // Sensor Health & Accuracy State
-  const [sensorHealth, setSensorHealth] = useState<'high' | 'medium' | 'needs_calibration' | 'manual'>(() => {
-    if (!isInitialCalibrationDone) return 'needs_calibration';
-    const savedMode = localStorage.getItem('vastudrishti_compass_sensor_mode');
-    return savedMode === 'true' ? 'high' : 'manual';
-  });
-  const [sensorAccuracyDeg, setSensorAccuracyDeg] = useState<number | null>(null);
-  const [needsCalibrationPrompt, setNeedsCalibrationPrompt] = useState<boolean>(() => !isInitialCalibrationDone);
-  const [magneticFieldUt, setMagneticFieldUt] = useState<number | null>(null);
-  const [sensorApiType, setSensorApiType] = useState<string>('Standard Sensor');
-
   // Device orientation & magnetometer listener for Android and iOS
   // Pauses all hardware sensor polling when user is on another tab to save battery & prevent background interference
   useEffect(() => {
@@ -272,13 +327,19 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
 
     const handleOrientation = (event: DeviceOrientationEvent) => {
       let alpha = event.alpha;
+      const beta = event.beta;   // Pitch (-180 to 180)
+      const gamma = event.gamma; // Roll (-90 to 90)
+
+      if (beta !== null && beta !== undefined) setDevicePitch(Math.round(beta));
+      if (gamma !== null && gamma !== undefined) setDeviceRoll(Math.round(gamma));
+
       // webkitCompassHeading & accuracy for iOS Safari / Mobile WebKit
       const webkitHeading = (event as unknown as { webkitCompassHeading?: number }).webkitCompassHeading;
       const webkitAccuracy = (event as unknown as { webkitCompassAccuracy?: number }).webkitCompassAccuracy;
       const isAbsolute = (event as unknown as { absolute?: boolean }).absolute;
 
       if (isAbsolute) {
-        setSensorApiType('Android Absolute Orientation');
+        setSensorApiType('Android Absolute Magnetometer');
       }
 
       if (webkitAccuracy !== undefined && webkitAccuracy >= 0) {
@@ -303,16 +364,22 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
 
       if (webkitHeading !== undefined) {
         alpha = webkitHeading;
-        setSensorApiType('iOS Compass Sensor');
+        setSensorApiType('iOS Precision Compass');
       } else if (alpha !== null) {
-        alpha = 360 - alpha; // Convert to clockwise
+        alpha = 360 - alpha; // Convert to clockwise azimuth
       }
 
       if (alpha !== null && !isNaN(alpha)) {
+        let finalHeading = alpha;
+        // Apply 3D Tilt Compensation if enabled and phone is tilted in hand
+        if (isTiltCompensationEnabled && beta !== null && gamma !== null) {
+          finalHeading = calculateTiltCompensatedHeading(alpha, beta, gamma);
+        }
+
         // Feed continuous angle directly to target for smooth visual interpolation
-        const normalized = ((alpha + calibrationOffset) % 360 + 360) % 360;
+        const normalized = ((finalHeading + calibrationOffset + declinationOffset) % 360 + 360) % 360;
         targetAngleRef.current = normalized;
-        onDegreeChange(Math.round(alpha));
+        onDegreeChange(Math.round(finalHeading));
       }
     };
 
@@ -350,7 +417,7 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
         try { magSensor.stop(); } catch {}
       }
     };
-  }, [isActive, isSensorActive, onDegreeChange, needsCalibrationPrompt, isInitialCalibrationDone, calibrationOffset]);
+  }, [isActive, isSensorActive, onDegreeChange, needsCalibrationPrompt, isInitialCalibrationDone, calibrationOffset, isTiltCompensationEnabled, declinationOffset]);
 
   const toggleSensor = async () => {
     if (isSensorActive) {
@@ -401,22 +468,43 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
 
   return (
     <div className="flex flex-col gap-3.5 sm:gap-5 p-3 sm:p-5 max-w-4xl mx-auto pb-24 font-sans text-[#3D342D]">
-      {/* Top Banner / Status - Space-Optimized Compact Header */}
+      {/* Top Banner / Status - Space-Optimized Compact Header with Digital Compass Logic */}
       <div className="bg-[#FCFAF7] border border-[#E8DCC4] rounded-2xl p-3 sm:p-3.5 flex flex-col gap-2.5 shadow-2xs w-full overflow-hidden">
-        <div className="flex items-center gap-2.5 min-w-0 w-full">
-          <div className="p-1.5 bg-[#FFFBEB] text-[#D97706] rounded-xl border border-[#FEF3C7] shrink-0">
-            <Compass className="w-4 h-4 animate-spin-slow" />
+        <div className="flex items-center justify-between gap-2.5 min-w-0 w-full">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-1.5 bg-[#FFFBEB] text-[#D97706] rounded-xl border border-[#FEF3C7] shrink-0">
+              <Compass className="w-4 h-4 animate-spin-slow" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-xs sm:text-sm font-serif font-bold text-[#78350F] leading-tight">
+                16-Zone Vastu Compass & Inclinometer
+              </h2>
+              <p className="text-[10px] sm:text-[11px] text-[#8B735B] leading-tight font-sans mt-0.5">
+                Precision 3D tilt-compensated magnetometer with Vedic Vastu alignment.
+              </p>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-xs sm:text-sm font-serif font-bold text-[#78350F] leading-tight">
-              16-Zone Vastu Shastra Compass
-            </h2>
-            <p className="text-[10px] sm:text-[11px] text-[#8B735B] leading-tight font-sans mt-0.5">
-              Align device or rotate dial to analyze Pancha Mahabhuta energies.
-            </p>
-          </div>
+
+          {/* Quick True North / Magnetic North Toggle Pill */}
+          <button
+            type="button"
+            onClick={toggleTrueNorth}
+            className={`px-2.5 py-1 text-[10.5px] font-sans font-extrabold rounded-xl border transition-all cursor-pointer shadow-2xs flex items-center gap-1 shrink-0 ${
+              useTrueNorth
+                ? 'bg-[#10B981] text-white border-[#059669] hover:bg-[#059669]'
+                : 'bg-[#FFFBEB] text-[#B45309] border-[#FDE68A] hover:bg-[#FEF3C7]'
+            }`}
+            title={useTrueNorth ? 'True North (Geographic) enabled with GPS declination' : 'Magnetic North enabled'}
+          >
+            <Radio className="w-3 h-3" />
+            <span>{useTrueNorth ? 'True North (TN)' : 'Magnetic North (MN)'}</span>
+            <span className="text-[9px] opacity-80 font-mono">
+              ({useTrueNorth ? `+${magneticDeclination}°` : '0°'})
+            </span>
+          </button>
         </div>
 
+        {/* Professional Digital Compass Controls Toolbar */}
         <div className="flex flex-wrap items-center gap-1.5 w-full justify-start pt-1 border-t border-[#E8DCC4]/50">
           {/* Real-time Sensor Health Badge */}
           {isSensorActive ? (
@@ -462,6 +550,54 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
             </div>
           )}
 
+          {/* 3D Tilt Compensation Toggle */}
+          <button
+            type="button"
+            onClick={toggleTiltCompensation}
+            className={`px-2.5 py-1 text-[10.5px] font-sans font-bold rounded-lg flex items-center justify-center gap-1 transition-all shadow-2xs cursor-pointer border ${
+              isTiltCompensationEnabled
+                ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0] hover:bg-[#D1FAE5]'
+                : 'bg-white text-[#8B735B] border-[#E8DCC4] hover:bg-[#F3EFE0]'
+            }`}
+            title="3D Tilt Compensation corrects heading calculation when phone is tilted"
+          >
+            <CircleDot className="w-3 h-3 text-[#059669]" />
+            <span>Tilt Comp: {isTiltCompensationEnabled ? 'ON' : 'OFF'}</span>
+          </button>
+
+          {/* Surface Level Inclinometer Mode Toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsLevelModeOpen(!isLevelModeOpen);
+              playTempleBellChime();
+            }}
+            className={`px-2.5 py-1 text-[10.5px] font-sans font-bold rounded-lg flex items-center justify-center gap-1 transition-all shadow-2xs cursor-pointer border ${
+              bubbleLevel.isLevel
+                ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]'
+                : 'bg-white text-[#78350F] border-[#E8DCC4] hover:bg-[#F3EFE0]'
+            }`}
+            title="Toggle device bubble level and surface leveling angle"
+          >
+            <Crosshair className="w-3 h-3 text-[#D97706]" />
+            <span>Level: {bubbleLevel.isLevel ? '0° (Flat)' : `${bubbleLevel.slope}°`}</span>
+          </button>
+
+          {/* Magnetic Field Status Badge */}
+          {magneticFieldUt !== null && (
+            <div
+              className={`px-2 py-1 text-[10px] font-mono font-bold rounded-lg border flex items-center gap-1 ${
+                magFieldEvaluation.status === 'interference'
+                  ? 'bg-[#FEF2F2] text-[#991B1B] border-[#FCA5A5]'
+                  : 'bg-white text-[#78350F] border-[#E8DCC4]'
+              }`}
+              title={magFieldEvaluation.label}
+            >
+              <Zap className="w-3 h-3 text-[#D97706]" />
+              <span>{magneticFieldUt} μT</span>
+            </div>
+          )}
+
           {/* Calibration Quick Action Button */}
           <button
             onClick={() => {
@@ -474,8 +610,8 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                 : 'bg-white text-[#78350F] border border-[#E8DCC4] hover:bg-[#F3EFE0]'
             }`}
           >
-            <Crosshair className="w-3 h-3 text-[#D97706]" />
-            <span>Calibrate</span>
+            <SlidersHorizontal className="w-3 h-3 text-[#D97706]" />
+            <span>Offset</span>
             {calibrationOffset !== 0 && (
               <span className="text-[9px] bg-[#D97706] text-white font-extrabold px-1 rounded">
                 {calibrationOffset > 0 ? `+${calibrationOffset}°` : `${calibrationOffset}°`}
@@ -486,16 +622,35 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
           {/* Device Sensor Toggle Button */}
           <button
             onClick={toggleSensor}
-            className={`px-2.5 py-1 text-[10.5px] font-sans font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-1 transition-all shadow-2xs cursor-pointer ${
+            className={`px-2.5 py-1 text-[10.5px] font-sans font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-1 transition-all shadow-2xs cursor-pointer ml-auto ${
               isSensorActive
                 ? 'bg-[#10B981] text-white hover:bg-[#059669]'
                 : 'bg-[#78350F] text-[#F3EFE0] hover:bg-[#5C280B]'
             }`}
           >
             <Smartphone className="w-3 h-3" />
-            {isSensorActive ? 'Device Sensor: ON' : 'Device Sensor'}
+            {isSensorActive ? 'Sensor: ON' : 'Sensor: OFF'}
           </button>
         </div>
+
+        {/* Live GPS Coordinates & Location DMS Ribbon */}
+        {userLocation && (
+          <div className="flex flex-wrap items-center justify-between text-[10px] font-mono text-[#8B735B] bg-white/80 p-2 rounded-xl border border-[#E8DCC4] gap-2">
+            <div className="flex items-center gap-1.5">
+              <MapPin className="w-3 h-3 text-[#D97706]" />
+              <span className="font-bold text-[#78350F]">
+                {formatCoordinatesToDMS(userLocation.latitude, true)} {formatCoordinatesToDMS(userLocation.longitude, false)}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              {userLocation.altitude !== null && userLocation.altitude !== undefined && (
+                <span>Alt: <strong className="text-[#3D342D]">{userLocation.altitude} m</strong></span>
+              )}
+              <span>Dec: <strong className="text-[#D97706]">+{magneticDeclination}° E</strong></span>
+              <span>Acc: <strong className="text-[#3D342D]">±{userLocation.accuracy || 5}m</strong></span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Sensor Calibration Alert Banner when magnetic interference detected or initial calibration required */}
@@ -539,6 +694,69 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
         </div>
       )}
 
+      {/* Surface Bubble Level Visualizer (Expandable or when Inclinometer is active) */}
+      {isLevelModeOpen && (
+        <div className="bg-[#FCFAF7] border-2 border-[#D97706]/40 rounded-3xl p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-top duration-200">
+          <div className="flex items-center gap-4">
+            {/* Circular Bubble Level Widget */}
+            <div className="relative w-20 h-20 rounded-full bg-[#FFFBEB] border-2 border-[#D97706] flex items-center justify-center shadow-inner overflow-hidden shrink-0">
+              {/* Target Crosshair */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-full h-px bg-[#D97706]/40" />
+                <div className="h-full w-px bg-[#D97706]/40 absolute" />
+                <div className="w-6 h-6 rounded-full border border-dashed border-[#D97706]/60" />
+              </div>
+              {/* Floating Bubble */}
+              <div
+                className={`w-5 h-5 rounded-full shadow-md transition-transform duration-75 flex items-center justify-center ${
+                  bubbleLevel.isLevel ? 'bg-[#10B981] ring-2 ring-[#059669]' : 'bg-[#D97706]'
+                }`}
+                style={{
+                  transform: `translate(${bubbleLevel.x}px, ${bubbleLevel.y}px)`,
+                }}
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-white/80" />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-serif font-bold text-[#78350F]">
+                  Surface Level / Inclinometer
+                </h4>
+                <span
+                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
+                    bubbleLevel.isLevel
+                      ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]'
+                      : 'bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]'
+                  }`}
+                >
+                  {bubbleLevel.isLevel ? '✓ Perfectly Level' : `Tilted ${bubbleLevel.slope}°`}
+                </span>
+              </div>
+              <p className="text-[11px] text-[#8B735B] mt-0.5">
+                Hold phone horizontally flat against ground/table for true Vastu azimuth.
+              </p>
+              <div className="flex items-center gap-3 text-[10px] font-mono text-[#3D342D] mt-1.5">
+                <span>Pitch (β): <strong>{devicePitch}°</strong></span>
+                <span>•</span>
+                <span>Roll (γ): <strong>{deviceRoll}°</strong></span>
+                <span>•</span>
+                <span>Slope: <strong>{bubbleLevel.slope}°</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsLevelModeOpen(false)}
+            className="px-3 py-1.5 bg-[#F3EFE0] hover:bg-[#E8DCC4] text-[#78350F] text-xs font-bold rounded-xl transition-all self-end sm:self-center"
+          >
+            Hide Inclinometer
+          </button>
+        </div>
+      )}
+
       {/* Main Interactive Compass Dial Card */}
       <div className="bg-gradient-to-b from-[#FFFDF9] via-[#FCFAF7] to-[#F3EFE0] rounded-3xl border-2 border-[#E8DCC4] p-6 shadow-md flex flex-col items-center gap-6 relative overflow-hidden">
         {/* Four Sacred Corner Flourishes */}
@@ -547,11 +765,19 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
         <div className="absolute bottom-3 left-3 text-[#D97706]/20 font-serif font-black text-xs select-none">❖ 360°</div>
         <div className="absolute bottom-3 right-3 text-[#D97706]/20 font-serif font-black text-xs select-none">ALIGN ❖</div>
 
-        {/* Degree Header & Current Zone */}
-        <div className="text-center z-10">
-          <div className="inline-flex flex-wrap items-center justify-center gap-2 px-4 py-1.5 rounded-full bg-[#F3EFE0] text-[#78350F] text-xs font-sans font-semibold mb-1 border border-[#E8DCC4] shadow-2xs">
+        {/* Degree Header & 16-Point Cardinal Subheading */}
+        <div className="text-center z-10 space-y-1">
+          <div className="inline-flex flex-wrap items-center justify-center gap-2 px-4 py-1.5 rounded-full bg-[#F3EFE0] text-[#78350F] text-xs font-sans font-semibold border border-[#E8DCC4] shadow-2xs">
             <span className="w-2 h-2 rounded-full bg-[#D97706] animate-ping" />
-            <span>Facing Angle: <strong className="text-[#3D342D] text-sm">{effectiveDegree}°</strong></span>
+            <span>Facing Azimuth: <strong className="text-[#3D342D] text-base">{effectiveDegree}°</strong></span>
+            <span className="px-2 py-0.5 rounded-full bg-[#78350F] text-[#FCFAF7] text-[11px] font-extrabold">
+              {currentCardinal16.code}
+            </span>
+            {useTrueNorth && (
+              <span className="text-[10px] font-bold bg-[#10B981] text-white px-1.5 py-0.5 rounded">
+                TN
+              </span>
+            )}
             {(sensorHealth === 'needs_calibration' || needsCalibrationPrompt || !isInitialCalibrationDone) && (
               <button
                 type="button"
@@ -567,7 +793,15 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
               </button>
             )}
           </div>
-          <p className="text-xs font-sans font-medium text-[#8B735B] flex items-center justify-center gap-2 mt-1">
+
+          {/* Subcardinal direction name and Vedic energy point */}
+          <div className="text-xs font-serif font-bold text-[#78350F] flex items-center justify-center gap-2">
+            <span>{currentCardinal16.name} ({currentCardinal16.code})</span>
+            <span>•</span>
+            <span className="text-[#D97706]">{currentCardinal16.hindi}</span>
+          </div>
+
+          <p className="text-xs font-sans font-medium text-[#8B735B] flex items-center justify-center gap-2">
             <span>Deity: <strong className="text-[#3D342D]">{currentZone.deity}</strong></span>
             <span>•</span>
             <span>Element: <strong className="text-[#D97706]">{currentZone.element}</strong></span>
@@ -620,11 +854,12 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
               );
             })}
 
-            {/* Inner Sacred Mandala Sun Dial */}
+            {/* Inner Sacred Mandala Sun Dial with Miniature Level Crosshair */}
             <div className="w-32 h-32 rounded-full border-2 border-dashed border-[#D97706]/50 bg-[#FFFBEB] flex items-center justify-center relative shadow-xs">
               <div className="text-center will-change-transform" style={{ transform: `rotate(${visualRotationDeg}deg)` }}>
                 <span className="text-xl font-serif font-extrabold text-[#78350F] block">{currentZone.code}</span>
                 <span className="text-[10px] font-sans uppercase tracking-wider text-[#A68A64] font-bold block">{currentZone.shortName}</span>
+                <span className="text-[8.5px] font-mono text-[#D97706] block font-bold mt-0.5">{effectiveDegree}°</span>
               </div>
             </div>
           </div>

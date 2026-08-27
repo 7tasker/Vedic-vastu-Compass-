@@ -46,7 +46,7 @@ export const AdminTaxReceiptTemplateTab: React.FC<AdminTaxReceiptTemplateTabProp
   });
   const [sampleUser, setSampleUser] = useState({
     name: 'Satish Pasala',
-    email: 'Admin@7tasker.com',
+    email: 'admin@vastucompass.app',
     paymentId: 'pay_RAZORPAY_89127391',
     orderId: 'order_ORD_991823719',
     date: new Date().toLocaleDateString(undefined, {

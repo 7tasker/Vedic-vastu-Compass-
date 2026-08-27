@@ -2,6 +2,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
   getAuth,
   GoogleAuthProvider,
+  signInWithCredential as fbSignInWithCredential,
   signInWithPopup as fbSignInWithPopup,
   signInWithRedirect as fbSignInWithRedirect,
   getRedirectResult as fbGetRedirectResult,
@@ -77,11 +78,13 @@ try {
 
 export const db = firestoreDb;
 
-export const ADMIN_EMAIL = 'admin@7tasker.com';
+export const ADMIN_EMAIL = 'admin@vastucompass.app';
+const LEGACY_ADMIN_EMAIL = 'admin@7tasker.com';
 
 export const isAdminEmail = (email?: string | null): boolean => {
   if (!email) return false;
-  return email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  const normalized = email.trim().toLowerCase();
+  return normalized === ADMIN_EMAIL.toLowerCase() || normalized === LEGACY_ADMIN_EMAIL.toLowerCase();
 };
 
 // Interface for User DB Document
@@ -227,27 +230,14 @@ export const signInWithEmailAndPassword = async (
     const mockUser = {
       uid: 'local_user_' + String(email).replace(/[^a-zA-Z0-9]/g, '_'),
       email,
-      displayName: isAdmin ? 'Admin Architect' : email.split('@')[0],
+      displayName: isAdmin ? 'Admin' : email.split('@')[0],
       photoURL: '',
       emailVerified: true,
     } as unknown as FirebaseUser;
     notifyLocalAuthListeners(mockUser);
     return { user: mockUser };
   }
-  try {
-    return await fbSignInWithEmailAndPassword(authInstance, email, pass);
-  } catch (_err: any) {
-    const isAdmin = isAdminEmail(email);
-    const mockUser = {
-      uid: 'user_' + String(email).replace(/[^a-zA-Z0-9]/g, '_'),
-      email,
-      displayName: isAdmin ? 'Admin Architect' : email.split('@')[0],
-      photoURL: '',
-      emailVerified: true,
-    } as unknown as FirebaseUser;
-    notifyLocalAuthListeners(mockUser);
-    return { user: mockUser };
-  }
+  return await fbSignInWithEmailAndPassword(authInstance, email, pass);
 };
 
 export const createUserWithEmailAndPassword = async (
@@ -260,27 +250,30 @@ export const createUserWithEmailAndPassword = async (
     const mockUser = {
       uid: 'local_user_' + String(email).replace(/[^a-zA-Z0-9]/g, '_'),
       email,
-      displayName: isAdmin ? 'Admin Architect' : email.split('@')[0],
+      displayName: isAdmin ? 'Admin' : email.split('@')[0],
       photoURL: '',
       emailVerified: true,
     } as unknown as FirebaseUser;
     notifyLocalAuthListeners(mockUser);
     return { user: mockUser };
   }
-  try {
-    return await fbCreateUserWithEmailAndPassword(authInstance, email, pass);
-  } catch (_err: any) {
-    const isAdmin = isAdminEmail(email);
+  return await fbCreateUserWithEmailAndPassword(authInstance, email, pass);
+};
+
+export const signInWithGoogleCredential = async (authInstance: Auth, idToken: string) => {
+  const credential = GoogleAuthProvider.credential(idToken);
+  if (!isConfigValid) {
     const mockUser = {
-      uid: 'user_' + String(email).replace(/[^a-zA-Z0-9]/g, '_'),
-      email,
-      displayName: isAdmin ? 'Admin Architect' : email.split('@')[0],
+      uid: 'native_google_user_' + Math.random().toString(36).substring(2, 9),
+      displayName: 'Vedic Practitioner',
+      email: 'user@vastucompass.app',
       photoURL: '',
       emailVerified: true,
     } as unknown as FirebaseUser;
     notifyLocalAuthListeners(mockUser);
     return { user: mockUser };
   }
+  return await fbSignInWithCredential(authInstance, credential);
 };
 
 export const signInWithPopup = async (authInstance: Auth, provider: any) => {
@@ -724,27 +717,44 @@ This is a spiritual practice, not a commercial product. By placing an order, you
   },
   appInfo: {
     title: 'Vastu Compass • Vedic Spatial Harmony Platform',
-    version: 'v3.2.5',
-    buildNumber: '325',
-    releaseDate: 'August 21, 2026',
-    externalUrl: 'https://vastucompass.app/release-notes-v3-2-5',
+    version: 'v3.3.0',
+    buildNumber: '330',
+    releaseDate: 'August 24, 2026',
+    externalUrl: 'https://vastucompass.app/release-notes-v3-3-0',
     improvements: [
+      '🧭 3D Tilt Compensation Engine: Hardware-accelerated Euler angle projections (Pitch β & Roll γ) maintaining precise azimuth accuracy during hand-held tilt.',
+      '🌐 True North (TN) vs Magnetic North (MN) Mode: Real-time World Magnetic Model (WMM) geomagnetic declination calculation with instant GPS-based toggle.',
+      '⚖️ Interactive Inclinometer & Bubble Level: Precision 2D spirit level visualizer with 0.1° surface leveling resolution and slope angle diagnostics.',
+      '🧲 Magnetic Field Intensity & Interference Meter: Live ambient flux monitoring in Microteslas (μT) with automated electromagnetic distortion warnings.',
+      '📍 High-Precision GPS DMS Ribbon: Real-time coordinate formatting in Degrees, Minutes, Seconds (DMS), altitude elevation, and GPS accuracy tracking.',
       '🚀 Over-The-Air (OTA) Asset Sync Engine: Live background bundle update compatibility with Capacitor / Android WebView.',
-      '🧭 Real-Time Compass Sensor Feedback Engine: Magnetometer orientation smoothing, zero offset presets, and directional alignment chimes.',
-      '⚠️ Interactive Calibration Prompt: Real-time sensor health detector highlighting when figure-8 device calibration is required.',
       '🪟 Interactive Popup Overlays: Full-screen Vastu Mandala visualizer, 16-Zone Deity & Limb detail cards, and audit reports.',
       '📱 Centered & Responsive Mobile Layout: Single-finger touch ergonomics, bounded containers, and portrait/landscape adaptation.',
       '📋 Unique Audit Report Reference Number (#RPT) with instant cloud syncing.',
-      '🤖 Instant AI Vastu Guru Assistant with context-aware room and elemental balance guidance.',
       '⚡ 45% reduction in initial bundle size and instant offline compass caching.',
     ],
     timeline: [
+      {
+        version: 'v3.3.0',
+        buildNumber: '330',
+        releaseDate: 'August 24, 2026',
+        title: '3D Tilt Compensation, True North & Inclinometer Bubble Level',
+        type: 'major',
+        highlights: [
+          'Implemented 3D Tilt-Compensated heading algorithm utilizing pitch and roll to eliminate hand-tilt azimuth drift.',
+          'Added True North (Geographic) vs Magnetic North toggle with dynamic GPS geomagnetic declination calculation.',
+          'Built-in precision 2D Surface Inclinometer & Bubble Level with slope angle tracking for flat surface verification.',
+          'Real-time ambient magnetic field sensor telemetry (μT) with smart electromagnetic interference detection.',
+          'High-precision GPS DMS (Degrees, Minutes, Seconds) coordinate ribbon with altitude and declination readouts.',
+          'Updated App Improvement and release history timeline with detailed sensor architecture specifications.',
+        ],
+      },
       {
         version: 'v3.2.5',
         buildNumber: '325',
         releaseDate: 'August 21, 2026',
         title: 'OTA Live Asset Sync & High-Precision Calibration',
-        type: 'major',
+        type: 'feature',
         highlights: [
           'Over-The-Air (OTA) Live Asset Sync for instant web asset updates on mobile devices.',
           'Pulsing Calibration Required real-time sensor prompt for magnetic distortion recovery.',
@@ -887,7 +897,7 @@ export const recordAdSenseMetricInFirestore = async (
           ecpm: 180.0,
           revenue: 0,
           activeAdUnits: 4,
-          publisherId: 'ca-pub-7tasker-vastu-9921',
+          publisherId: 'ca-pub-vastu-compass-9921',
           createdAt: new Date().toISOString(),
         };
 

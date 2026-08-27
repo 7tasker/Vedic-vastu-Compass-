@@ -1,5 +1,5 @@
 {
-  "appId": "com.seventasker.vastucompass",
+  "appId": "vedic.vastu.compass",
   "appName": "Vastu Compass",
   "webDir": "dist",
   "bundledWebRuntime": false,
@@ -13,10 +13,19 @@
     "webContentsDebuggingEnabled": true
   },
   "plugins": {
+    "GoogleAuth": {
+      "scopes": ["profile", "email"],
+      "serverClientId": "87203320531-nlb6h8rjmdhg4uilkd1so67h4pr6ieum.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": true
+    },
     "SplashScreen": {
-      "launchShowDuration": 2000,
+      "launchShowDuration": 1500,
+      "launchAutoHide": true,
       "backgroundColor": "#78350F",
-      "showSpinner": false
+      "showSpinner": false,
+      "androidSplashResourceName": "splash",
+      "splashFullScreen": true,
+      "splashImmersive": true
     },
     "PushNotifications": {
       "presentationOptions": ["badge", "sound", "alert"]

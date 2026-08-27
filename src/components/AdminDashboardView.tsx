@@ -240,7 +240,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
 
     const steps = [
       'Authenticating Google Account OAuth & AdMob Publisher Credentials...',
-      'Validating Publisher Account Client ID: pub-7tasker-vastu-9921...',
+      'Validating Publisher Account Client ID: pub-vastu-compass-9921...',
       'Checking Google Policy Compliance & Policy Center: 0 Violations (Clean Account)',
       'Inspecting Registered In-App Ad Units (Banner, Interstitial, Rewarded, Native)...',
       'Testing Ad Unit Delivery Latency & Fill Rate: 38ms (100% Fill Rate OK)',
@@ -380,7 +380,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   // Search & Filter state
   const [userSearchQuery, setUserSearchQuery] = useState<string>('');
   const [paymentSearchQuery, setPaymentSearchQuery] = useState<string>('');
-  const [publisherIdConfig, setPublisherIdConfig] = useState<string>('ca-pub-7tasker-vastu-9921');
+  const [publisherIdConfig, setPublisherIdConfig] = useState<string>('ca-pub-vastu-compass-9921');
   const [adsEnabled, setAdsEnabled] = useState<boolean>(true);
   const [adminMsg, setAdminMsg] = useState<string>('');
 
@@ -606,7 +606,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
           ecpm: 195.4,
           revenue: 277.46,
           activeAdUnits: 4,
-          publisherId: 'ca-pub-7tasker-vastu-9921',
+          publisherId: 'ca-pub-vastu-compass-9921',
           createdAt: new Date().toISOString(),
         });
       }
@@ -861,7 +861,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const handleTriggerAutoGeotag = async () => {
     setIsGeotagging(true);
     try {
-      const rec = await performAutoGeotag('admin@7tasker.com', 'Admin Satish');
+      const rec = await performAutoGeotag('admin@vastucompass.app', 'Admin Satish');
       setGeotagRecords(getGeotagRecords());
       if (rec) {
         setAdminMsg(`📍 Auto geotag logged: ${rec.city}, ${rec.state} (${rec.latitude}, ${rec.longitude})`);
@@ -971,7 +971,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `7tasker_vastu_payments_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `vastu_compass_payments_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     playTempleBellChime();
   };
@@ -1048,10 +1048,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
               <span className="bg-[#D97706] text-white text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wider">
                 Backend System Control
               </span>
-              <span className="text-[10px] text-[#E8DCC4] font-mono">admin@7tasker.com</span>
+              <span className="text-[10px] text-[#E8DCC4] font-mono">admin@vastucompass.app</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-serif font-extrabold text-[#F3EFE0] mt-0.5">
-              7Tasker Vastu Admin Dashboard
+              Vastu Compass Admin Dashboard
             </h1>
           </div>
         </div>
@@ -1076,7 +1076,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
 
       {!isAdminAuthorized && (
         <div className="max-w-7xl mx-auto bg-[#FEF2F2] border-2 border-[#FCA5A5] p-4 rounded-2xl mb-6 text-center text-[#991B1B] text-xs font-bold">
-          ⚠️ Note: Signed in as guest or non-admin account. Full backend actions are restricted to admin@7tasker.com.
+          ⚠️ Note: Signed in as guest or non-admin account. Full backend actions are restricted to authorized administrators.
         </div>
       )}
 
@@ -2598,7 +2598,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                   <div className="space-y-2.5 text-xs text-[#3D342D]">
                     <div className="flex justify-between py-2 border-b border-[#E8DCC4]">
                       <span className="text-[#8B735B]">Designated Admin Email:</span>
-                      <span className="font-bold text-[#D97706] font-mono">admin@7tasker.com</span>
+                      <span className="font-bold text-[#D97706] font-mono">admin@vastucompass.app</span>
                     </div>
                     <div className="flex justify-between py-2 border-b border-[#E8DCC4]">
                       <span className="text-[#8B735B]">Firebase Auth Provider:</span>
@@ -2610,7 +2610,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                     </div>
                     <div className="flex justify-between py-2">
                       <span className="text-[#8B735B]">AdSense Publisher ID:</span>
-                      <span className="font-mono font-bold text-[#2563EB]">ca-pub-7tasker-vastu-9921</span>
+                      <span className="font-mono font-bold text-[#2563EB]">ca-pub-vastu-compass-9921</span>
                     </div>
                   </div>
                 </div>
@@ -2977,6 +2977,29 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                       placeholder="⚡ Added 16-Zone Vastu Shakti Chakra Alignment Engine..."
                       className="w-full text-xs font-mono bg-[#FAF7F2] border border-[#E8DCC4] rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-[#D97706] leading-relaxed"
                     />
+                  </div>
+
+                  {/* Release History Timeline Editor / Viewer */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#78350F]">
+                        Release History Timeline ({legalConfig.appInfo?.timeline?.length || 0} Releases)
+                      </label>
+                      <span className="text-[10px] font-mono text-[#059669] font-bold bg-[#ECFDF5] px-2 py-0.5 rounded-full border border-[#A7F3D0]">
+                        Synced with Firestore
+                      </span>
+                    </div>
+                    <div className="space-y-2 max-h-48 overflow-y-auto p-2 bg-[#FAF7F2] rounded-xl border border-[#E8DCC4]">
+                      {legalConfig.appInfo?.timeline?.map((item, idx) => (
+                        <div key={idx} className="bg-white p-2.5 rounded-lg border border-[#E8DCC4] text-[11px] space-y-1">
+                          <div className="flex items-center justify-between font-bold text-[#78350F]">
+                            <span>{item.version} - {item.title}</span>
+                            <span className="text-[9px] text-[#8B735B] font-normal">{item.releaseDate}</span>
+                          </div>
+                          <p className="text-[10px] text-[#5C4D3C] line-clamp-1">{item.highlights.join(' • ')}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
                   <div>

@@ -615,11 +615,11 @@ app.post('/api/vastu-consultant', async (req, res) => {
       ? placedRooms.map((r: { roomType: string; degree: number }) => `- Room: ${r.roomType} at ${Math.round(r.degree)}°`).join('\n')
       : 'No specific room list placed yet.';
 
-    const systemPrompt = `You are the official Customer Support & App Assistant for the 7Tasker Vastu Compass application.
+    const systemPrompt = `You are the official Customer Support & App Assistant for the Vastu Compass application.
 Your mission is STRICTLY to assist users with:
 1. ⏰ **Customer Support Timings & Official Contacts**:
    - Support Operating Hours: Monday to Saturday, 9:00 AM – 7:00 PM IST.
-   - Official Emails: support@7tasker.com, admin@7tasker.com.
+   - Official Emails: support@vastucompass.app, admin@vastucompass.app.
    - Expert Consultation Forum: Users can submit personalized architectural/astrological inquiries in the "Consultation" tab and receive replies under "My Inquiries".
 2. 💳 **Account-Related Queries & Subscriptions**:
    - Pro Membership Plans: Vastu Pro Monthly (₹499 / $9.99/mo) and Vedic Master Lifetime Pro Pass (₹999 / $19.99 one-time).
