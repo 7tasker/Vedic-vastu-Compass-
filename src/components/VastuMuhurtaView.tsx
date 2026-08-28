@@ -804,31 +804,31 @@ export const VastuMuhurtaView: React.FC<VastuMuhurtaViewProps> = ({
 
       {/* Floating Filter Opt-In Modal */}
       {isFilterModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2.5 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-[#FCFAF7] rounded-3xl border border-[#E8DCC4] max-w-md w-full p-3.5 sm:p-6 shadow-2xl relative space-y-4 max-h-[70vh] overflow-y-auto overflow-x-hidden">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2.5 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 font-sans">
+          <div className="bg-[#FCFAF7] rounded-3xl border border-[#E8DCC4] max-w-md w-full p-3.5 sm:p-5 shadow-2xl relative space-y-2.5 max-h-[92vh] overflow-y-auto overflow-x-hidden">
             {/* Close Button */}
             <button
               onClick={() => setIsFilterModalOpen(false)}
-              className="absolute top-3 right-3 sm:top-4 sm:right-4 p-1.5 rounded-full text-[#8B735B] hover:text-[#78350F] hover:bg-[#F3EFE0] transition-all z-10"
+              className="absolute top-3 right-3 sm:top-4 sm:right-4 p-1.5 rounded-full text-[#8B735B] hover:text-[#78350F] hover:bg-[#F3EFE0] transition-all z-10 cursor-pointer"
               title="Close Filters"
             >
               <X className="w-5 h-5" />
             </button>
 
             {/* Filter Options Form */}
-            <div className="space-y-4 text-xs">
+            <div className="space-y-2.5 text-xs">
               {/* Event / Ceremony 5-Petal Lotus Flower Filter */}
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <label className="font-bold text-[#78350F] flex items-center gap-1.5 text-sm">
+                  <label className="font-bold text-[#78350F] flex items-center gap-1.5 text-xs sm:text-sm">
                     <Sparkles className="w-4 h-4 text-[#D97706]" />
                     Select Sacred Event / Ceremony
                   </label>
                 </div>
 
                 {/* 5-Petal Flower Rangoli Radial Layout (Dynamically Scaled for Mobile) */}
-                <div className="w-full flex items-center justify-center overflow-hidden py-1">
-                  <div className="relative w-[340px] sm:w-[385px] h-[340px] sm:h-[385px] shrink-0 scale-[0.76] min-[380px]:scale-[0.85] min-[440px]:scale-[0.92] sm:scale-100 origin-center -my-10 min-[380px]:-my-6 min-[440px]:-my-3 sm:my-1 transition-transform">
+                <div className="w-full flex items-center justify-center overflow-hidden py-0.5">
+                  <div className="relative w-[340px] sm:w-[385px] h-[340px] sm:h-[385px] shrink-0 scale-[0.70] min-[380px]:scale-[0.76] min-[440px]:scale-[0.84] sm:scale-[0.88] origin-center -my-11 min-[380px]:-my-9 min-[440px]:-my-6 sm:-my-4 transition-transform">
                   {/* SVG Background Rangoli Petal Art */}
                   <svg viewBox="0 0 360 360" className="absolute inset-0 w-full h-full pointer-events-none drop-shadow-md">
                     <defs>
@@ -1045,60 +1045,58 @@ export const VastuMuhurtaView: React.FC<VastuMuhurtaViewProps> = ({
               </div>
             </div>
 
-              {/* Month Filter */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-[#78350F] flex items-center gap-1.5">
-                  <CalendarIcon className="w-4 h-4 text-[#D97706]" />
-                  Target Month / Hindu Masa
-                </label>
-                <select
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="w-full bg-white border border-[#E8DCC4] rounded-2xl p-2.5 font-medium text-[#78350F] outline-none focus:ring-2 focus:ring-[#D97706]"
-                >
-                  <option value="all">All Months</option>
-                  <option value="August 2026">August 2026</option>
-                  <option value="September 2026">September 2026</option>
-                  <option value="October 2026">October 2026 (Navratri)</option>
-                  <option value="November 2026">November 2026 (Kartika)</option>
-                  <option value="December 2026">December 2026</option>
-                  <option value="January 2027">January 2027 (Makar Sankranti)</option>
-                </select>
-              </div>
+              {/* Month and Moon Sign Rashi Filter Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="font-bold text-[#78350F] flex items-center gap-1 text-[11px]">
+                    <CalendarIcon className="w-3.5 h-3.5 text-[#D97706]" />
+                    Target Month
+                  </label>
+                  <select
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="w-full bg-white border border-[#E8DCC4] rounded-xl p-2 text-xs font-medium text-[#78350F] outline-none focus:ring-1 focus:ring-[#D97706]"
+                  >
+                    <option value="all">All Months</option>
+                    <option value="August 2026">August 2026</option>
+                    <option value="September 2026">September 2026</option>
+                    <option value="October 2026">October 2026 (Navratri)</option>
+                    <option value="November 2026">November 2026 (Kartika)</option>
+                    <option value="December 2026">December 2026</option>
+                    <option value="January 2027">January 2027 (Makar Sankranti)</option>
+                  </select>
+                </div>
 
-              {/* Moon Sign Rashi Filter */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-[#78350F] flex items-center gap-1.5">
-                  <Moon className="w-4 h-4 text-[#D97706]" />
-                  Personal Moon Sign (Janma Rashi)
-                </label>
-                <select
-                  value={selectedRashi}
-                  onChange={(e) => setSelectedRashi(e.target.value)}
-                  className="w-full bg-white border border-[#E8DCC4] rounded-2xl p-2.5 font-medium text-[#78350F] outline-none focus:ring-2 focus:ring-[#D97706]"
-                >
-                  <option value="all">All Moon Signs (General)</option>
-                  <option value="Aries">Aries (Mesha)</option>
-                  <option value="Taurus">Taurus (Vrishabha)</option>
-                  <option value="Gemini">Gemini (Mithuna)</option>
-                  <option value="Cancer">Cancer (Karka)</option>
-                  <option value="Leo">Leo (Simha)</option>
-                  <option value="Virgo">Virgo (Kanya)</option>
-                  <option value="Libra">Libra (Tula)</option>
-                  <option value="Scorpio">Scorpio (Vrishchika)</option>
-                  <option value="Sagittarius">Sagittarius (Dhanu)</option>
-                  <option value="Capricorn">Capricorn (Makara)</option>
-                  <option value="Aquarius">Aquarius (Kumbha)</option>
-                  <option value="Pisces">Pisces (Meena)</option>
-                </select>
-                <p className="text-[11px] text-[#8B735B]">
-                  Filters dates that have special compatibility with your rashi.
-                </p>
+                <div className="space-y-1">
+                  <label className="font-bold text-[#78350F] flex items-center gap-1 text-[11px]">
+                    <Moon className="w-3.5 h-3.5 text-[#D97706]" />
+                    Janma Rashi
+                  </label>
+                  <select
+                    value={selectedRashi}
+                    onChange={(e) => setSelectedRashi(e.target.value)}
+                    className="w-full bg-white border border-[#E8DCC4] rounded-xl p-2 text-xs font-medium text-[#78350F] outline-none focus:ring-1 focus:ring-[#D97706]"
+                  >
+                    <option value="all">All Signs</option>
+                    <option value="Aries">Aries (Mesha)</option>
+                    <option value="Taurus">Taurus (Vrishabha)</option>
+                    <option value="Gemini">Gemini (Mithuna)</option>
+                    <option value="Cancer">Cancer (Karka)</option>
+                    <option value="Leo">Leo (Simha)</option>
+                    <option value="Virgo">Virgo (Kanya)</option>
+                    <option value="Libra">Libra (Tula)</option>
+                    <option value="Scorpio">Scorpio (Vrishchika)</option>
+                    <option value="Sagittarius">Sagittarius (Dhanu)</option>
+                    <option value="Capricorn">Capricorn (Makara)</option>
+                    <option value="Aquarius">Aquarius (Kumbha)</option>
+                    <option value="Pisces">Pisces (Meena)</option>
+                  </select>
+                </div>
               </div>
             </div>
 
             {/* Modal Actions */}
-            <div className="pt-3 border-t border-[#E8DCC4] flex items-center gap-2">
+            <div className="pt-2 border-t border-[#E8DCC4] flex items-center gap-2">
               <button
                 onClick={() => {
                   setSelectedCeremony('griha_pravesh');
@@ -1107,13 +1105,13 @@ export const VastuMuhurtaView: React.FC<VastuMuhurtaViewProps> = ({
                   setSelectedRashi('all');
                   setViewMode('list');
                 }}
-                className="px-4 py-2.5 bg-white border border-[#E8DCC4] text-[#8B735B] hover:text-[#78350F] text-xs font-bold rounded-2xl flex items-center gap-1.5 transition-all"
+                className="px-3.5 py-2 bg-white border border-[#E8DCC4] text-[#8B735B] hover:text-[#78350F] text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
               >
-                <RotateCcw className="w-3.5 h-3.5" /> Reset
+                <RotateCcw className="w-3 h-3" /> Reset
               </button>
               <button
                 onClick={() => setIsFilterModalOpen(false)}
-                className="flex-1 py-2.5 bg-[#78350F] hover:bg-[#5C280B] text-white text-xs font-bold uppercase tracking-wider rounded-2xl transition-all shadow-md"
+                className="flex-1 py-2 bg-[#78350F] hover:bg-[#5C280B] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all shadow-xs cursor-pointer"
               >
                 Apply Filters
               </button>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PlacedRoom, UserProfile, PropertyRecord } from '../types';
 import { calculateHouseAudit, playTempleBellChime } from '../utils/vastuUtils';
 import { searchOfflineVastuDb, saveVastuRuleItem, getVastuDbStats } from '../utils/vastuKnowledgeDb';
+import { getApiUrl } from '../utils/apiConfig';
 import { db } from '../lib/firebase';
 import { collection, addDoc, getDocs, query, orderBy } from 'firebase/firestore';
 import {
@@ -284,7 +285,7 @@ export const AIVastuGuruView: React.FC<AIVastuGuruViewProps> = ({ placedRooms, c
 
     // 2. STEP TWO: If not found in offline DB & online query allowed, consult Gemini API
     try {
-      const response = await fetch('/api/vastu-consultant', {
+      const response = await fetch(getApiUrl('/api/vastu-consultant'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,5 +1,6 @@
 import { db } from '../lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { getApiUrl } from './apiConfig';
 
 export interface VastuPlanConfig {
   id: string;
@@ -240,7 +241,7 @@ export const testGatewayConnection = async (
       }
 
       // Live backend health & order check
-      const backendRes = await fetch('/api/payments/razorpay/create-order', {
+      const backendRes = await fetch(getApiUrl('/api/payments/razorpay/create-order'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -290,7 +291,7 @@ export const testGatewayConnection = async (
       }
 
       // Live backend PayPal config check
-      const backendRes = await fetch('/api/payments/paypal/config').catch(() => null);
+      const backendRes = await fetch(getApiUrl('/api/payments/paypal/config')).catch(() => null);
       const latencyMs = Math.round(performance.now() - start);
 
       if (backendRes && backendRes.ok) {
@@ -331,7 +332,7 @@ export const testGatewayConnection = async (
       }
 
       // Live backend GPay check
-      const backendRes = await fetch('/api/payments/gpay/config').catch(() => null);
+      const backendRes = await fetch(getApiUrl('/api/payments/gpay/config')).catch(() => null);
       const latencyMs = Math.round(performance.now() - start);
 
       if (backendRes && backendRes.ok) {

@@ -24,6 +24,7 @@ import {
   PaymentGatewayConfig,
   VastuPlanConfig,
 } from '../utils/paymentConfig';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface RazorpayModalProps {
   isOpen: boolean;
@@ -190,7 +191,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
         createOrder: async (_data: any, actions: any) => {
           try {
             setIsLoading(true);
-            const res = await fetch('/api/payments/paypal/create-order', {
+            const res = await fetch(getApiUrl('/api/payments/paypal/create-order'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -253,7 +254,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
               data?.orderID ||
               `pay_pp_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
 
-            const capRes = await fetch('/api/payments/paypal/capture-order', {
+            const capRes = await fetch(getApiUrl('/api/payments/paypal/capture-order'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -377,7 +378,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
             };
 
             const paymentData = await paymentsClient.loadPaymentData(paymentDataRequest);
-            const processRes = await fetch('/api/payments/gpay/process-payment', {
+            const processRes = await fetch(getApiUrl('/api/payments/gpay/process-payment'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -481,7 +482,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
       };
 
       try {
-        const orderRes = await fetch('/api/payments/razorpay/create-order', {
+        const orderRes = await fetch(getApiUrl('/api/payments/razorpay/create-order'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -549,7 +550,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
     setShowGPayModal(false);
 
     try {
-      const intentRes = await fetch('/api/payments/gpay/create-payment-intent', {
+      const intentRes = await fetch(getApiUrl('/api/payments/gpay/create-payment-intent'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -566,7 +567,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
         intentData?.orderId ||
         `order_gpay_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-      const processRes = await fetch('/api/payments/gpay/process-payment', {
+      const processRes = await fetch(getApiUrl('/api/payments/gpay/process-payment'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -610,7 +611,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
     setShowPaypalModal(false);
 
     try {
-      const createRes = await fetch('/api/payments/paypal/create-order', {
+      const createRes = await fetch(getApiUrl('/api/payments/paypal/create-order'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -631,7 +632,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
         orderData?.id ||
         `ORDER-PP-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 
-      const capRes = await fetch('/api/payments/paypal/capture-order', {
+      const capRes = await fetch(getApiUrl('/api/payments/paypal/capture-order'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

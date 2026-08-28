@@ -13,6 +13,7 @@ import {
   evaluateMagneticFieldStatus,
   get16CardinalFromDegree,
   CARDINAL_POINTS_16,
+  CompassMotionAnalyzer,
 } from '../utils/compassSensorLogic';
 import {
   Compass,
@@ -239,6 +240,8 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
   const markInitialCalibrationCompleted = () => {
     setIsInitialCalibrationDone(true);
     setNeedsCalibrationPrompt(false);
+    setCalibrationAnomalyReason(null);
+    if (motionAnalyzerRef.current) motionAnalyzerRef.current.reset();
     setSensorHealth('high');
     setSensorAccuracyDeg(1);
     try {
@@ -255,8 +258,10 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
   });
   const [sensorAccuracyDeg, setSensorAccuracyDeg] = useState<number | null>(null);
   const [needsCalibrationPrompt, setNeedsCalibrationPrompt] = useState<boolean>(() => !isInitialCalibrationDone);
+  const [calibrationAnomalyReason, setCalibrationAnomalyReason] = useState<string | null>(null);
   const [magneticFieldUt, setMagneticFieldUt] = useState<number | null>(null);
   const [sensorApiType, setSensorApiType] = useState<string>('Standard Sensor');
+  const motionAnalyzerRef = useRef<CompassMotionAnalyzer>(new CompassMotionAnalyzer());
 
   // Effective calibrated degree used across all calculations:
   // Adds True North declination offset when True North mode is selected
@@ -370,6 +375,14 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
       }
 
       if (alpha !== null && !isNaN(alpha)) {
+        // Independent Motion & Jitter Anomaly Analysis on compass needle movement
+        const motionEval = motionAnalyzerRef.current.pushSample(alpha, beta || 0, gamma || 0);
+        if (motionEval.isAnomaly && motionEval.severity === 'critical') {
+          setSensorHealth('needs_calibration');
+          setNeedsCalibrationPrompt(true);
+          setCalibrationAnomalyReason(motionEval.reason);
+        }
+
         let finalHeading = alpha;
         // Apply 3D Tilt Compensation if enabled and phone is tilted in hand
         if (isTiltCompensationEnabled && beta !== null && gamma !== null) {
@@ -401,17 +414,30 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
     }
 
     // Modern Android devices fire 'deviceorientationabsolute' for true magnetic North
+    // If absolute orientation is available, prefer it to prevent double-firing collisions with relative deviceorientation
+    let receivedAbsolute = false;
+    const handleAbsoluteOrientation = (event: DeviceOrientationEvent) => {
+      receivedAbsolute = true;
+      handleOrientation(event);
+    };
+
+    const handleRelativeOrientation = (event: DeviceOrientationEvent) => {
+      // If absolute events are actively being received, ignore relative fallback to prevent event race/jitter
+      if (receivedAbsolute) return;
+      handleOrientation(event);
+    };
+
     if ('ondeviceorientationabsolute' in window) {
-      window.addEventListener('deviceorientationabsolute', handleOrientation as any, true);
+      window.addEventListener('deviceorientationabsolute', handleAbsoluteOrientation as any, true);
     }
-    window.addEventListener('deviceorientation', handleOrientation, true);
+    window.addEventListener('deviceorientation', handleRelativeOrientation, true);
     window.addEventListener('compassneedscalibration', handleNeedsCalibration, true);
 
     return () => {
       if ('ondeviceorientationabsolute' in window) {
-        window.removeEventListener('deviceorientationabsolute', handleOrientation as any, true);
+        window.removeEventListener('deviceorientationabsolute', handleAbsoluteOrientation as any, true);
       }
-      window.removeEventListener('deviceorientation', handleOrientation, true);
+      window.removeEventListener('deviceorientation', handleRelativeOrientation, true);
       window.removeEventListener('compassneedscalibration', handleNeedsCalibration, true);
       if (magSensor) {
         try { magSensor.stop(); } catch {}
@@ -598,27 +624,6 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
             </div>
           )}
 
-          {/* Calibration Quick Action Button */}
-          <button
-            onClick={() => {
-              setIsCalibrationModalOpen(true);
-              playTempleBellChime();
-            }}
-            className={`px-2.5 py-1 text-[10.5px] font-sans font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-1 transition-all shadow-2xs cursor-pointer ${
-              calibrationOffset !== 0
-                ? 'bg-[#FEF3C7] text-[#78350F] border border-[#F59E0B] hover:bg-[#FDE68A]'
-                : 'bg-white text-[#78350F] border border-[#E8DCC4] hover:bg-[#F3EFE0]'
-            }`}
-          >
-            <SlidersHorizontal className="w-3 h-3 text-[#D97706]" />
-            <span>Offset</span>
-            {calibrationOffset !== 0 && (
-              <span className="text-[9px] bg-[#D97706] text-white font-extrabold px-1 rounded">
-                {calibrationOffset > 0 ? `+${calibrationOffset}°` : `${calibrationOffset}°`}
-              </span>
-            )}
-          </button>
-
           {/* Device Sensor Toggle Button */}
           <button
             onClick={toggleSensor}
@@ -656,20 +661,23 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
       {/* Sensor Calibration Alert Banner when magnetic interference detected or initial calibration required */}
       {(sensorHealth === 'needs_calibration' || needsCalibrationPrompt || !isInitialCalibrationDone) && (
         <div className="bg-[#FEF2F2] border-2 border-[#FCA5A5] p-3.5 rounded-2xl flex items-center justify-between gap-3 shadow-xs animate-in slide-in-from-top duration-200">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
             <div className="p-2 bg-[#FEE2E2] text-[#DC2626] rounded-xl shrink-0">
               <AlertTriangle className="w-5 h-5 animate-bounce" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h4 className="text-xs font-bold text-[#991B1B]">
-                {!isInitialCalibrationDone
-                  ? 'Sensor Distorted — Initial Calibration Required'
-                  : 'Magnetic Distortion / Sensor Interference Detected'}
+                {calibrationAnomalyReason
+                  ? 'Motion Anomaly: Recalibration Needed'
+                  : !isInitialCalibrationDone
+                  ? 'Initial Sensor Calibration Recommended'
+                  : 'Magnetic Distortion / Interference Detected'}
               </h4>
-              <p className="text-[11px] text-[#7F1D1D]">
-                {!isInitialCalibrationDone
-                  ? 'Initial setup detected. Please calibrate your smartphone sensor with a Figure-8 wave or align GPS to ensure exact Vastu zone accuracy.'
-                  : 'Your device magnetometer accuracy has degraded. Wave your phone in a Figure-8 loop to restore 100% Vastu accuracy.'}
+              <p className="text-[11px] text-[#7F1D1D] leading-tight mt-0.5">
+                {calibrationAnomalyReason ||
+                  (!isInitialCalibrationDone
+                    ? 'Initial setup detected. Please calibrate your smartphone sensor with a Figure-8 wave or align GPS to ensure exact Vastu zone accuracy.'
+                    : 'Your device magnetometer accuracy has degraded. Wave your phone in a Figure-8 loop to restore 100% Vastu accuracy.')}
               </p>
             </div>
           </div>
@@ -1084,20 +1092,20 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
 
       {/* COMPASS CALIBRATION MODAL */}
       {isCalibrationModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 font-sans">
-          <div className="bg-[#FCFAF7] rounded-3xl border border-[#E8DCC4] max-w-lg w-full p-5 sm:p-6 shadow-2xl relative space-y-5 max-h-[70vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2.5 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 font-sans">
+          <div className="bg-[#FCFAF7] rounded-3xl border border-[#E8DCC4] max-w-md w-full p-4 sm:p-5 shadow-2xl relative space-y-3 max-h-[90vh] overflow-y-auto">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-[#E8DCC4] pb-3.5">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-[#FEF3C7] text-[#D97706] rounded-xl border border-[#FDE68A]">
-                  <Crosshair className="w-5 h-5" />
+            <div className="flex items-center justify-between border-b border-[#E8DCC4] pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-[#FEF3C7] text-[#D97706] rounded-xl border border-[#FDE68A]">
+                  <Crosshair className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-serif font-bold text-[#78350F]">
+                  <h3 className="text-sm sm:text-base font-serif font-bold text-[#78350F]">
                     Compass Calibration & Alignment
                   </h3>
-                  <p className="text-[11px] text-[#8B735B]">
-                    Detect current GPS location, coordinate alignment & sensor offset for 100% precise Vastu readings.
+                  <p className="text-[10px] text-[#8B735B]">
+                    Detect GPS location, coordinate alignment & sensor offset for 100% precise Vastu readings.
                   </p>
                 </div>
               </div>
@@ -1111,10 +1119,10 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
             </div>
 
             {/* Navigation Tabs */}
-            <div className="grid grid-cols-4 gap-1 p-1 bg-[#F3EFE0] rounded-2xl text-[11px] font-bold text-[#78350F]">
+            <div className="grid grid-cols-4 gap-1 p-1 bg-[#F3EFE0] rounded-2xl text-[10px] sm:text-[11px] font-bold text-[#78350F]">
               <button
                 onClick={() => setCalibrationTab('quick')}
-                className={`py-2 rounded-xl transition-all ${
+                className={`py-1.5 rounded-xl transition-all ${
                   calibrationTab === 'quick' ? 'bg-[#78350F] text-white shadow-xs' : 'hover:bg-white/50'
                 }`}
               >
@@ -1122,7 +1130,7 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
               </button>
               <button
                 onClick={() => setCalibrationTab('fine')}
-                className={`py-2 rounded-xl transition-all ${
+                className={`py-1.5 rounded-xl transition-all ${
                   calibrationTab === 'fine' ? 'bg-[#78350F] text-white shadow-xs' : 'hover:bg-white/50'
                 }`}
               >
@@ -1130,7 +1138,7 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
               </button>
               <button
                 onClick={() => setCalibrationTab('location')}
-                className={`py-2 rounded-xl transition-all ${
+                className={`py-1.5 rounded-xl transition-all ${
                   calibrationTab === 'location' ? 'bg-[#78350F] text-white shadow-xs' : 'hover:bg-white/50'
                 }`}
               >
@@ -1138,7 +1146,7 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
               </button>
               <button
                 onClick={() => setCalibrationTab('guide')}
-                className={`py-2 rounded-xl transition-all ${
+                className={`py-1.5 rounded-xl transition-all ${
                   calibrationTab === 'guide' ? 'bg-[#78350F] text-white shadow-xs' : 'hover:bg-white/50'
                 }`}
               >
@@ -1156,21 +1164,21 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                   handleUpdateOffset(0);
                   playTempleBellChime();
                 }}
-                className="text-[11px] font-bold text-[#991B1B] hover:text-[#7F1D1D] flex items-center gap-1.5 px-2.5 py-1 bg-[#FEF2F2] hover:bg-[#FEE2E2] rounded-lg border border-[#FECACA] transition-all cursor-pointer shadow-2xs"
+                className="text-[10px] font-bold text-[#991B1B] hover:text-[#7F1D1D] flex items-center gap-1 px-2 py-0.5 bg-[#FEF2F2] hover:bg-[#FEE2E2] rounded-lg border border-[#FECACA] transition-all cursor-pointer shadow-2xs"
                 title="Reset compass calibration offset to 0°"
               >
-                <RotateCcw className="w-3 h-3 text-[#991B1B]" /> Reset to Factory Default (0°)
+                <RotateCcw className="w-2.5 h-2.5 text-[#991B1B]" /> Reset to 0°
               </button>
             </div>
 
             {/* TAB 1: QUICK ZERO NORTH */}
             {calibrationTab === 'quick' && (
-              <div className="space-y-4">
-                <div className="bg-white p-4 rounded-2xl border border-[#E8DCC4] text-center space-y-2">
-                  <span className="text-xs font-bold text-[#8B735B] uppercase tracking-wider block">
+              <div className="space-y-3">
+                <div className="bg-white p-3.5 rounded-2xl border border-[#E8DCC4] text-center space-y-1.5">
+                  <span className="text-[10px] font-bold text-[#8B735B] uppercase tracking-wider block">
                     Current Uncalibrated Raw Heading
                   </span>
-                  <div className="text-3xl font-serif font-black text-[#78350F]">
+                  <div className="text-2xl sm:text-3xl font-serif font-black text-[#78350F]">
                     {rawDegree}°
                   </div>
                   <div className="text-xs text-[#D97706] font-semibold">
@@ -1178,22 +1186,23 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                   </div>
                 </div>
 
-                <div className="bg-[#FFFBEB] p-4 rounded-2xl border border-[#FEF3C7] space-y-3">
+                <div className="bg-[#FFFBEB] p-3.5 rounded-2xl border border-[#FEF3C7] space-y-2.5">
                   <h4 className="text-xs font-bold text-[#78350F] flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-[#D97706]" />
+                    <Sparkles className="w-3.5 h-3.5 text-[#D97706]" />
                     Point Phone to Physical North (0°)
                   </h4>
-                  <p className="text-xs text-[#8B735B] leading-relaxed">
+                  <p className="text-[11px] text-[#8B735B] leading-relaxed">
                     Stand facing true North in your building or plot. Tap below to set your current physical facing direction directly as 0° North.
                   </p>
                   <button
                     onClick={() => {
-                      // Set offset so current raw degree maps to 0
-                      const newOffset = (360 - rawDegree) % 360;
-                      handleUpdateOffset(newOffset);
+                      // Set offset so current raw degree + declination maps exactly to 0° North
+                      const currentTotalHeading = (rawDegree + declinationOffset) % 360;
+                      const neededOffset = (360 - currentTotalHeading) % 360;
+                      handleUpdateOffset(neededOffset);
                       playTempleBellChime();
                     }}
-                    className="w-full py-3 px-4 bg-[#78350F] hover:bg-[#5C280B] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
+                    className="w-full py-2.5 px-3.5 bg-[#78350F] hover:bg-[#5C280B] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Crosshair className="w-4 h-4 text-[#F59E0B]" />
                     Set Current Facing Direction as True North (0°)
@@ -1204,8 +1213,8 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
 
             {/* TAB 2: FINE TUNE OFFSET */}
             {calibrationTab === 'fine' && (
-              <div className="space-y-4">
-                <div className="bg-white p-4 rounded-2xl border border-[#E8DCC4] space-y-3">
+              <div className="space-y-3">
+                <div className="bg-white p-3.5 rounded-2xl border border-[#E8DCC4] space-y-2.5">
                   <div className="flex items-center justify-between text-xs font-bold text-[#78350F]">
                     <span>Manual Calibration Offset:</span>
                     <span className="text-sm font-black text-[#D97706]">
@@ -1214,7 +1223,7 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                   </div>
 
                   {/* Step Adjustment Buttons */}
-                  <div className="grid grid-cols-6 gap-1.5">
+                  <div className="grid grid-cols-6 gap-1">
                     {[-15, -5, -1, 1, 5, 15].map((step) => (
                       <button
                         key={step}
@@ -1222,7 +1231,7 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                           handleUpdateOffset(calibrationOffset + step);
                           playTempleBellChime();
                         }}
-                        className="py-2 text-xs font-bold rounded-xl border border-[#E8DCC4] bg-[#FCFAF7] hover:bg-[#FEF3C7] text-[#78350F] transition-all"
+                        className="py-1.5 text-xs font-bold rounded-xl border border-[#E8DCC4] bg-[#FCFAF7] hover:bg-[#FEF3C7] text-[#78350F] transition-all cursor-pointer"
                       >
                         {step > 0 ? `+${step}°` : `${step}°`}
                       </button>
@@ -1230,7 +1239,7 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                   </div>
 
                   {/* Range Slider for Offset */}
-                  <div className="pt-2 space-y-1">
+                  <div className="pt-1 space-y-1">
                     <input
                       type="range"
                       min="-180"
@@ -1240,17 +1249,17 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                       className="w-full h-2 bg-[#F3EFE0] rounded-lg appearance-none cursor-pointer accent-[#D97706]"
                     />
                     <div className="flex justify-between text-[10px] text-[#8B735B] font-bold">
-                      <span>-180° (West Shift)</span>
+                      <span>-180° (West)</span>
                       <span>0° (Standard)</span>
-                      <span>+180° (East Shift)</span>
+                      <span>+180° (East)</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="text-xs text-[#8B735B] bg-[#FFFBEB] p-3 rounded-xl border border-[#FEF3C7] flex items-start gap-2">
-                  <Info className="w-4 h-4 text-[#D97706] shrink-0 mt-0.5" />
+                <div className="text-[11px] text-[#8B735B] bg-[#FFFBEB] p-2.5 rounded-xl border border-[#FEF3C7] flex items-start gap-1.5">
+                  <Info className="w-3.5 h-3.5 text-[#D97706] shrink-0 mt-0.5" />
                   <span>
-                    Fine-tuning allows correcting for local structural steel beams, iron door frames, or electrical panels that distort magnetic readings.
+                    Fine-tuning corrects for local steel beams, iron frames, or electrical panels distorting magnetic readings.
                   </span>
                 </div>
               </div>
@@ -1258,26 +1267,26 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
 
             {/* TAB 3: CURRENT LOCATION & GPS COORDINATES */}
             {calibrationTab === 'location' && (
-              <div className="space-y-4">
-                <div className="bg-white p-4 rounded-2xl border border-[#E8DCC4] space-y-3">
+              <div className="space-y-3">
+                <div className="bg-white p-3.5 rounded-2xl border border-[#E8DCC4] space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="p-2 bg-[#FEF3C7] text-[#D97706] rounded-xl border border-[#FDE68A]">
-                        <MapPin className="w-5 h-5" />
+                      <div className="p-1.5 bg-[#FEF3C7] text-[#D97706] rounded-xl border border-[#FDE68A]">
+                        <MapPin className="w-4 h-4" />
                       </div>
                       <div>
                         <h4 className="text-xs font-serif font-bold text-[#78350F]">
                           GPS Geolocation Coordinates
                         </h4>
                         <span className="text-[10px] text-[#8B735B]">
-                          Live coordinates for geographical position & directional accuracy
+                          Live coordinates for geographical position
                         </span>
                       </div>
                     </div>
 
                     {userLocation && (
-                      <span className="px-2.5 py-0.5 text-[10px] font-extrabold rounded-full bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-[#10B981]" /> Auto-Filled
+                      <span className="px-2 py-0.5 text-[9px] font-extrabold rounded-full bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] flex items-center gap-1">
+                        <CheckCircle2 className="w-2.5 h-2.5 text-[#10B981]" /> Auto-Filled
                       </span>
                     )}
                   </div>
@@ -1287,60 +1296,60 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                     type="button"
                     onClick={() => handleDetectCurrentLocation(false)}
                     disabled={isLocating}
-                    className="w-full py-2.5 px-4 bg-[#78350F] hover:bg-[#5C280B] disabled:opacity-60 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-2 px-3 bg-[#78350F] hover:bg-[#5C280B] disabled:opacity-60 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {isLocating ? (
                       <>
-                        <RefreshCw className="w-4 h-4 text-[#F59E0B] animate-spin" />
-                        Detecting Live GPS Coordinates...
+                        <RefreshCw className="w-3.5 h-3.5 text-[#F59E0B] animate-spin" />
+                        Detecting Live GPS...
                       </>
                     ) : (
                       <>
-                        <LocateFixed className="w-4 h-4 text-[#F59E0B]" />
-                        {userLocation ? 'Re-Sync Live GPS Location' : 'Detect & Auto-Fill My GPS Location'}
+                        <LocateFixed className="w-3.5 h-3.5 text-[#F59E0B]" />
+                        {userLocation ? 'Re-Sync Live GPS' : 'Detect & Auto-Fill GPS'}
                       </>
                     )}
                   </button>
 
                   {/* Location Error Notice */}
                   {locationError && (
-                    <div className="p-3 bg-[#FEF2F2] border border-[#FCA5A5] rounded-xl text-xs text-[#991B1B] flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div className="p-2.5 bg-[#FEF2F2] border border-[#FCA5A5] rounded-xl text-[11px] text-[#991B1B] flex items-start gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                       <span>{locationError}</span>
                     </div>
                   )}
 
                   {/* Active Location Coordinates Display */}
                   {userLocation ? (
-                    <div className="p-3.5 bg-[#FAF7F2] rounded-xl border border-[#E8DCC4] space-y-2.5">
-                      <div className="flex items-center justify-between text-xs border-b border-[#E8DCC4] pb-2">
-                        <span className="font-bold text-[#78350F] flex items-center gap-1.5">
-                          <Globe className="w-3.5 h-3.5 text-[#D97706]" /> {userLocation.city || 'Detected Location'}
+                    <div className="p-3 bg-[#FAF7F2] rounded-xl border border-[#E8DCC4] space-y-2">
+                      <div className="flex items-center justify-between text-xs border-b border-[#E8DCC4] pb-1.5">
+                        <span className="font-bold text-[#78350F] flex items-center gap-1 text-[11px]">
+                          <Globe className="w-3 h-3 text-[#D97706]" /> {userLocation.city || 'Detected Location'}
                         </span>
-                        <span className="text-[10px] text-[#8B735B] font-mono">
-                          Synced at {userLocation.timestamp}
+                        <span className="text-[9px] text-[#8B735B] font-mono">
+                          {userLocation.timestamp}
                         </span>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                        <div className="bg-white p-2 rounded-lg border border-[#E8DCC4]">
-                          <span className="text-[10px] text-[#8B735B] block font-sans">Latitude:</span>
-                          <strong className="text-[#78350F]">{userLocation.latitude}° N</strong>
+                        <div className="bg-white p-1.5 rounded-lg border border-[#E8DCC4]">
+                          <span className="text-[9px] text-[#8B735B] block font-sans">Latitude:</span>
+                          <strong className="text-[#78350F] text-[11px]">{userLocation.latitude}° N</strong>
                         </div>
-                        <div className="bg-white p-2 rounded-lg border border-[#E8DCC4]">
-                          <span className="text-[10px] text-[#8B735B] block font-sans">Longitude:</span>
-                          <strong className="text-[#78350F]">{userLocation.longitude}° E</strong>
+                        <div className="bg-white p-1.5 rounded-lg border border-[#E8DCC4]">
+                          <span className="text-[9px] text-[#8B735B] block font-sans">Longitude:</span>
+                          <strong className="text-[#78350F] text-[11px]">{userLocation.longitude}° E</strong>
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between text-[10px] text-[#8B735B] pt-0.5">
+                      <div className="flex items-center justify-between text-[9px] text-[#8B735B]">
                         <span>Accuracy: <strong>±{userLocation.accuracy || 5}m</strong></span>
                         <span>{userLocation.country || 'Northern Hemisphere'}</span>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-3 bg-[#FFFBEB] rounded-xl border border-[#FEF3C7] text-xs text-[#8B735B] text-center">
-                      GPS coordinates are recording automatically in background. Tap the button above to manually refresh.
+                    <div className="p-2.5 bg-[#FFFBEB] rounded-xl border border-[#FEF3C7] text-[11px] text-[#8B735B] text-center">
+                      GPS coordinates recording in background. Tap above to refresh.
                     </div>
                   )}
                 </div>
@@ -1349,10 +1358,10 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
 
             {/* TAB 4: SENSOR MAGNETOMETER FIGURE-8 GUIDE */}
             {calibrationTab === 'guide' && (
-              <div className="space-y-4 text-center">
-                <div className="bg-white p-5 rounded-2xl border border-[#E8DCC4] flex flex-col items-center gap-3">
+              <div className="space-y-3 text-center">
+                <div className="bg-white p-3.5 rounded-2xl border border-[#E8DCC4] flex flex-col items-center gap-2">
                   {/* Figure 8 Vector Animation */}
-                  <div className="relative w-36 h-24 flex items-center justify-center">
+                  <div className="relative w-28 h-18 flex items-center justify-center">
                     <svg viewBox="0 0 160 100" className="w-full h-full text-[#D97706]">
                       <path
                         d="M 40 50 C 10 10, 10 90, 40 50 C 70 10, 150 10, 120 50 C 90 90, 10 90, 40 50 C 70 10, 150 90, 120 50"
@@ -1364,14 +1373,14 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                       />
                       <circle cx="80" cy="50" r="6" fill="#78350F" />
                     </svg>
-                    <Smartphone className="w-6 h-6 text-[#78350F] absolute animate-bounce" />
+                    <Smartphone className="w-5 h-5 text-[#78350F] absolute animate-bounce" />
                   </div>
 
-                  <h4 className="text-sm font-serif font-bold text-[#78350F]">
+                  <h4 className="text-xs font-serif font-bold text-[#78350F]">
                     Smartphone Magnetometer Sensor Wave
                   </h4>
-                  <p className="text-xs text-[#8B735B] leading-relaxed max-w-sm">
-                    Hold your phone flat in hand and wave it smoothly in a <strong>Figure-8 loop</strong> 3 to 4 times in the air. This recalculates internal gyroscope coils and removes accumulated magnetic static.
+                  <p className="text-[11px] text-[#8B735B] leading-relaxed max-w-xs">
+                    Hold phone flat and wave smoothly in a <strong>Figure-8 loop</strong> 3-4 times to recalculate sensor coils.
                   </p>
 
                   <button
@@ -1380,14 +1389,14 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                       markInitialCalibrationCompleted();
                       setIsCalibrationModalOpen(false);
                     }}
-                    className="w-full mt-2 py-3 bg-[#10B981] hover:bg-[#059669] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full mt-1 py-2.5 bg-[#10B981] hover:bg-[#059669] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <CheckCircle2 className="w-4 h-4 text-white" />
-                    Figure-8 Wave Complete (Mark Calibrated)
+                    <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                    Figure-8 Complete (Mark Calibrated)
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between text-xs p-3 rounded-xl border transition-all ${
+                <div className="flex items-center justify-between text-[11px] p-2.5 rounded-xl border transition-all ${
                   sensorHealth === 'high'
                     ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]'
                     : sensorHealth === 'medium'
@@ -1396,26 +1405,26 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                     ? 'bg-[#FEF2F2] text-[#991B1B] border-[#FCA5A5]'
                     : 'bg-[#F9FAFB] text-[#4B5563] border-[#E5E7EB]'
                 }">
-                  <div className="flex items-center gap-2 font-bold">
+                  <div className="flex items-center gap-1.5 font-bold">
                     {sensorHealth === 'high' ? (
                       <>
-                        <ShieldCheck className="w-4 h-4 text-[#10B981] shrink-0" />
-                        <span>Magnetometer Health: High Precision (±{sensorAccuracyDeg || 1}°)</span>
+                        <ShieldCheck className="w-3.5 h-3.5 text-[#10B981] shrink-0" />
+                        <span>Precision: High (±{sensorAccuracyDeg || 1}°)</span>
                       </>
                     ) : sensorHealth === 'medium' ? (
                       <>
-                        <Activity className="w-4 h-4 text-[#D97706] shrink-0" />
-                        <span>Magnetometer Health: Good (±{sensorAccuracyDeg || 3}°)</span>
+                        <Activity className="w-3.5 h-3.5 text-[#D97706] shrink-0" />
+                        <span>Precision: Good (±{sensorAccuracyDeg || 3}°)</span>
                       </>
                     ) : isSensorActive ? (
                       <>
-                        <AlertTriangle className="w-4 h-4 text-[#DC2626] shrink-0 animate-bounce" />
-                        <span>Magnetometer: Sensor Distorted (Wave Figure-8)</span>
+                        <AlertTriangle className="w-3.5 h-3.5 text-[#DC2626] shrink-0 animate-bounce" />
+                        <span>Wave Figure-8</span>
                       </>
                     ) : (
                       <>
-                        <Smartphone className="w-4 h-4 text-[#9CA3AF] shrink-0" />
-                        <span>Sensor Idle (Manual Mode)</span>
+                        <Smartphone className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" />
+                        <span>Sensor Idle</span>
                       </>
                     )}
                   </div>
@@ -1425,7 +1434,7 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
                       onClick={() => {
                         markInitialCalibrationCompleted();
                       }}
-                      className="px-2 py-1 bg-white hover:bg-[#F3EFE0] text-[#78350F] text-[10px] font-bold rounded-lg border border-[#E8DCC4] transition-all cursor-pointer"
+                      className="px-2 py-0.5 bg-white hover:bg-[#F3EFE0] text-[#78350F] text-[9px] font-bold rounded-lg border border-[#E8DCC4] transition-all cursor-pointer"
                     >
                       Clear Warnings
                     </button>
@@ -1435,15 +1444,15 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
             )}
 
             {/* Footer Done Action */}
-            <div className="pt-2">
+            <div className="pt-1">
               <button
                 onClick={() => {
                   markInitialCalibrationCompleted();
                   setIsCalibrationModalOpen(false);
                 }}
-                className="w-full py-3 bg-[#78350F] hover:bg-[#5C280B] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-2.5 bg-[#78350F] hover:bg-[#5C280B] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <Check className="w-4 h-4 text-[#F59E0B]" /> Done Calibrating
+                <Check className="w-3.5 h-3.5 text-[#F59E0B]" /> Done Calibrating
               </button>
             </div>
           </div>

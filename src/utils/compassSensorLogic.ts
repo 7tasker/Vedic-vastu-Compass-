@@ -232,3 +232,100 @@ export function smoothAngleStep(
   if (Math.abs(diff) < 0.01) return targetAngle;
   return currentAngle + diff * smoothingFactor;
 }
+
+/**
+ * Independent Real-Time Compass Anomaly & Jitter Detector
+ * Evaluates erratic needle spinning, rapid oscillation jitter, and sudden unphysical
+ * directional jumps (caused by electromagnetic interference from rebar, electrical panels, or motors).
+ */
+export interface AnomalyEvaluation {
+  isAnomaly: boolean;
+  severity: 'none' | 'moderate' | 'critical';
+  reason: string;
+  jitterScore: number; // 0..100
+}
+
+export class CompassMotionAnalyzer {
+  private history: Array<{ angle: number; time: number; pitch: number; roll: number }> = [];
+  private readonly windowMs: number = 1200; // 1.2 second analysis window
+
+  public pushSample(angle: number, pitch: number = 0, roll: number = 0): AnomalyEvaluation {
+    const now = performance.now();
+    this.history.push({ angle, time: now, pitch, roll });
+
+    // Prune samples older than window
+    this.history = this.history.filter((s) => now - s.time <= this.windowMs);
+
+    if (this.history.length < 5) {
+      return { isAnomaly: false, severity: 'none', reason: '', jitterScore: 0 };
+    }
+
+    // 1. Calculate direction reversals (jitter oscillation)
+    let directionChanges = 0;
+    let totalAngularTravel = 0;
+    let maxSingleStepJump = 0;
+    let prevDiff = 0;
+
+    for (let i = 1; i < this.history.length; i++) {
+      const prev = this.history[i - 1];
+      const curr = this.history[i];
+      const diff = ((curr.angle - prev.angle + 540) % 360) - 180;
+      const dt = Math.max(1, curr.time - prev.time);
+
+      const absDiff = Math.abs(diff);
+      totalAngularTravel += absDiff;
+
+      if (absDiff > maxSingleStepJump && dt < 100) {
+        maxSingleStepJump = absDiff;
+      }
+
+      if (i > 1) {
+        // Did the direction of rotation reverse?
+        if ((diff > 2 && prevDiff < -2) || (diff < -2 && prevDiff > 2)) {
+          directionChanges++;
+        }
+      }
+      prevDiff = diff;
+    }
+
+    // Unphysical sudden jump (>40° within <60ms while device slope remains steady)
+    if (maxSingleStepJump > 40) {
+      return {
+        isAnomaly: true,
+        severity: 'critical',
+        reason: 'Sudden magnetic deflection detected (nearby iron beam or electronics).',
+        jitterScore: 90,
+      };
+    }
+
+    // Rapid needle oscillation / jitter: > 3 directional flips within 1.2s with high travel
+    if (directionChanges >= 3 && totalAngularTravel > 35) {
+      return {
+        isAnomaly: true,
+        severity: 'critical',
+        reason: 'Erratic compass oscillation detected. Phone sensor needs Figure-8 recalibration.',
+        jitterScore: 85,
+      };
+    }
+
+    if (directionChanges >= 2 && totalAngularTravel > 25) {
+      return {
+        isAnomaly: true,
+        severity: 'moderate',
+        reason: 'Mild magnetic instability detected.',
+        jitterScore: 50,
+      };
+    }
+
+    return {
+      isAnomaly: false,
+      severity: 'none',
+      reason: 'Stable',
+      jitterScore: 10,
+    };
+  }
+
+  public reset(): void {
+    this.history = [];
+  }
+}

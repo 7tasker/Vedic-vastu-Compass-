@@ -16,6 +16,17 @@ async function startServer() {
 
   app.use(express.json({ limit: '10mb' }));
 
+  // Enable CORS for native Android WebView & cross-origin API access
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   // Shared Gemini AI Client (Server-side)
   const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
@@ -745,6 +756,14 @@ ${roomsSummary}`;
       releaseNotes: 'Vastu Compass v3.2.5 with live OTA update sync support.',
       downloadUrl: '/dist/assets/',
       timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Ensure all API calls are handled strictly before SPA catch-all
+  app.all('/api/*', (_req, res) => {
+    res.status(404).json({
+      error: 'API endpoint not found',
+      status: 404,
     });
   });
 
