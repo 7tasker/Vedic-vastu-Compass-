@@ -10,18 +10,31 @@ initializeNativeApp().catch((err) => {
   console.warn('Native bootstrap note:', err);
 });
 
-// Handle generic cross-origin script errors gracefully
+// Handle generic cross-origin script and transient browser database errors gracefully
 if (typeof window !== 'undefined') {
   window.addEventListener('error', (event) => {
-    if (event.message && (event.message.includes('Script error') || event.message.includes('adsbygoogle'))) {
-      console.warn('Handled cross-origin script event:', event.message);
+    const msg = event.message || '';
+    if (
+      msg.includes('Script error') ||
+      msg.includes('adsbygoogle') ||
+      msg.includes('Database is closing') ||
+      msg.includes('closing/hidden') ||
+      msg.includes('The database connection is closing')
+    ) {
+      console.info('ℹ️ Handled transient window error event:', msg);
       event.preventDefault();
     }
   });
 
   window.addEventListener('unhandledrejection', (event) => {
-    if (event.reason && String(event.reason).includes('Script error')) {
-      console.warn('Handled unhandled rejection:', event.reason);
+    const reasonStr = String(event.reason || '');
+    if (
+      reasonStr.includes('Script error') ||
+      reasonStr.includes('Database is closing') ||
+      reasonStr.includes('closing/hidden') ||
+      reasonStr.includes('The database connection is closing')
+    ) {
+      console.info('ℹ️ Handled transient unhandled rejection:', reasonStr);
       event.preventDefault();
     }
   });

@@ -542,12 +542,15 @@ export const FlutterAppContainer: React.FC = () => {
     const code = err?.code || 'unknown';
     const message = err?.message || String(err);
 
-    // If user closed the popup or cancelled request intentionally, or browser DB closing notice occurred, log as info notice instead of error
+    // If user closed the popup or cancelled request intentionally, or browser DB closing / redirect empty notice occurred, log as info notice instead of error
     if (
       code === 'auth/popup-closed-by-user' ||
       code === 'auth/cancelled-popup-request' ||
+      code === 'auth/argument-error' ||
+      code === 'auth/null-user' ||
       message.includes('Database is closing') ||
-      message.includes('closing/hidden')
+      message.includes('closing/hidden') ||
+      message.includes('auth/argument-error')
     ) {
       console.info(`ℹ️ [Firebase Auth Notice - ${context}]: Google sign-in notice (${code}): ${message}`);
       return;

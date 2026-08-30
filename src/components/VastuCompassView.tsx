@@ -530,18 +530,34 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
           </button>
         </div>
 
-        {/* Professional Digital Compass Controls Toolbar */}
-        <div className="flex flex-wrap items-center gap-1.5 w-full justify-start pt-1 border-t border-[#E8DCC4]/50">
-          {/* Real-time Sensor Health Badge */}
+        {/* Professional Digital Compass Controls Toolbar - Balanced 2x2 Grid on Mobile, 4-Col on Desktop */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full pt-2 border-t border-[#E8DCC4]/50">
+          {/* 1. Device Sensor Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleSensor}
+            className={`w-full py-2 px-2.5 text-[11px] font-sans font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer border ${
+              isSensorActive
+                ? 'bg-[#10B981] text-white border-[#059669] hover:bg-[#059669]'
+                : 'bg-[#78350F] text-[#F3EFE0] border-[#5C280B] hover:bg-[#5C280B]'
+            }`}
+            title="Turn device magnetometer / motion sensors on or off"
+          >
+            <Smartphone className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{isSensorActive ? 'Sensor: ON' : 'Sensor: OFF'}</span>
+          </button>
+
+          {/* 2. Real-time Sensor Health / Calibration Badge */}
           {isSensorActive ? (
             <button
+              type="button"
               onClick={() => {
                 setCalibrationTab('guide');
                 setIsCalibrationModalOpen(true);
                 playTempleBellChime();
               }}
               title="Click to check sensor calibration & run Figure-8 loop"
-              className={`px-2.5 py-1 text-[10.5px] font-sans font-bold rounded-lg flex items-center gap-1.5 border transition-all cursor-pointer shadow-2xs ${
+              className={`w-full py-2 px-2.5 text-[11px] font-sans font-bold rounded-xl flex items-center justify-center gap-1.5 border transition-all cursor-pointer shadow-2xs ${
                 sensorHealth === 'high'
                   ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0] hover:bg-[#D1FAE5]'
                   : sensorHealth === 'medium'
@@ -551,103 +567,80 @@ export const VastuCompassView: React.FC<VastuCompassViewProps> = ({
             >
               {sensorHealth === 'high' ? (
                 <>
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-ping shrink-0" />
-                  <ShieldCheck className="w-3 h-3 text-[#10B981]" />
-                  <span>High Acc (±{sensorAccuracyDeg || 1}°)</span>
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#10B981] shrink-0" />
+                  <span className="truncate">High Acc (±{sensorAccuracyDeg || 1}°)</span>
                 </>
               ) : sensorHealth === 'medium' ? (
                 <>
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] shrink-0" />
-                  <Activity className="w-3 h-3 text-[#D97706]" />
-                  <span>Normal (±{sensorAccuracyDeg || 3}°)</span>
+                  <Activity className="w-3.5 h-3.5 text-[#D97706] shrink-0" />
+                  <span className="truncate">Normal (±{sensorAccuracyDeg || 3}°)</span>
                 </>
               ) : (
                 <>
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#EF4444] animate-ping shrink-0" />
-                  <AlertTriangle className="w-3 h-3 text-[#DC2626]" />
-                  <span className="font-extrabold">Wave 8 Calib</span>
+                  <AlertTriangle className="w-3.5 h-3.5 text-[#DC2626] shrink-0" />
+                  <span className="truncate font-extrabold">Wave 8 Calib</span>
                 </>
               )}
             </button>
           ) : (
-            <div className="px-2 py-1 text-[10px] font-sans font-semibold text-[#8B735B] bg-white border border-[#E8DCC4] rounded-lg flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#D1D5DB]" />
-              <span>Manual</span>
+            <div className="w-full py-2 px-2.5 text-[11px] font-sans font-semibold text-[#8B735B] bg-white border border-[#E8DCC4] rounded-xl flex items-center justify-center gap-1.5 shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#D1D5DB] shrink-0" />
+              <span className="truncate">Manual Mode</span>
             </div>
           )}
 
-          {/* 3D Tilt Compensation Toggle */}
+          {/* 3. 3D Tilt Compensation Toggle */}
           <button
             type="button"
             onClick={toggleTiltCompensation}
-            className={`px-2.5 py-1 text-[10.5px] font-sans font-bold rounded-lg flex items-center justify-center gap-1 transition-all shadow-2xs cursor-pointer border ${
+            className={`w-full py-2 px-2.5 text-[11px] font-sans font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer border ${
               isTiltCompensationEnabled
                 ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0] hover:bg-[#D1FAE5]'
-                : 'bg-white text-[#8B735B] border-[#E8DCC4] hover:bg-[#F3EFE0]'
+                : 'bg-white text-[#78350F] border-[#E8DCC4] hover:bg-[#F3EFE0]'
             }`}
             title="3D Tilt Compensation corrects heading calculation when phone is tilted"
           >
-            <CircleDot className="w-3 h-3 text-[#059669]" />
-            <span>Tilt Comp: {isTiltCompensationEnabled ? 'ON' : 'OFF'}</span>
+            <CircleDot className={`w-3.5 h-3.5 shrink-0 ${isTiltCompensationEnabled ? 'text-[#059669]' : 'text-[#8B735B]'}`} />
+            <span className="truncate">Tilt Comp: {isTiltCompensationEnabled ? 'ON' : 'OFF'}</span>
           </button>
 
-          {/* Surface Level Inclinometer Mode Toggle */}
+          {/* 4. Surface Level Inclinometer Mode Toggle */}
           <button
             type="button"
             onClick={() => {
               setIsLevelModeOpen(!isLevelModeOpen);
               playTempleBellChime();
             }}
-            className={`px-2.5 py-1 text-[10.5px] font-sans font-bold rounded-lg flex items-center justify-center gap-1 transition-all shadow-2xs cursor-pointer border ${
+            className={`w-full py-2 px-2.5 text-[11px] font-sans font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer border ${
               bubbleLevel.isLevel
-                ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]'
+                ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0] hover:bg-[#D1FAE5]'
                 : 'bg-white text-[#78350F] border-[#E8DCC4] hover:bg-[#F3EFE0]'
             }`}
             title="Toggle device bubble level and surface leveling angle"
           >
-            <Crosshair className="w-3 h-3 text-[#D97706]" />
-            <span>Level: {bubbleLevel.isLevel ? '0° (Flat)' : `${bubbleLevel.slope}°`}</span>
-          </button>
-
-          {/* Magnetic Field Status Badge */}
-          {magneticFieldUt !== null && (
-            <div
-              className={`px-2 py-1 text-[10px] font-mono font-bold rounded-lg border flex items-center gap-1 ${
-                magFieldEvaluation.status === 'interference'
-                  ? 'bg-[#FEF2F2] text-[#991B1B] border-[#FCA5A5]'
-                  : 'bg-white text-[#78350F] border-[#E8DCC4]'
-              }`}
-              title={magFieldEvaluation.label}
-            >
-              <Zap className="w-3 h-3 text-[#D97706]" />
-              <span>{magneticFieldUt} μT</span>
-            </div>
-          )}
-
-          {/* Device Sensor Toggle Button */}
-          <button
-            onClick={toggleSensor}
-            className={`px-2.5 py-1 text-[10.5px] font-sans font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-1 transition-all shadow-2xs cursor-pointer ml-auto ${
-              isSensorActive
-                ? 'bg-[#10B981] text-white hover:bg-[#059669]'
-                : 'bg-[#78350F] text-[#F3EFE0] hover:bg-[#5C280B]'
-            }`}
-          >
-            <Smartphone className="w-3 h-3" />
-            {isSensorActive ? 'Sensor: ON' : 'Sensor: OFF'}
+            <Crosshair className="w-3.5 h-3.5 text-[#D97706] shrink-0" />
+            <span className="truncate">Level: {bubbleLevel.isLevel ? '0° (Flat)' : `${bubbleLevel.slope}°`}</span>
           </button>
         </div>
 
-        {/* Live GPS Coordinates & Location DMS Ribbon */}
+        {/* Live GPS Coordinates & Telemetry Ribbon */}
         {userLocation && (
-          <div className="flex flex-wrap items-center justify-between text-[10px] font-mono text-[#8B735B] bg-white/80 p-2 rounded-xl border border-[#E8DCC4] gap-2">
+          <div className="flex flex-wrap items-center justify-between text-[10px] font-mono text-[#8B735B] bg-white/80 p-2 sm:p-2.5 rounded-xl border border-[#E8DCC4] gap-2">
             <div className="flex items-center gap-1.5">
-              <MapPin className="w-3 h-3 text-[#D97706]" />
+              <MapPin className="w-3.5 h-3.5 text-[#D97706] shrink-0" />
               <span className="font-bold text-[#78350F]">
                 {formatCoordinatesToDMS(userLocation.latitude, true)} {formatCoordinatesToDMS(userLocation.longitude, false)}
               </span>
             </div>
             <div className="flex items-center gap-3">
+              {magneticFieldUt !== null && (
+                <span className="flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-[#D97706]" />
+                  <strong className={magFieldEvaluation.status === 'interference' ? 'text-[#DC2626]' : 'text-[#78350F]'}>
+                    {magneticFieldUt} μT
+                  </strong>
+                </span>
+              )}
               {userLocation.altitude !== null && userLocation.altitude !== undefined && (
                 <span>Alt: <strong className="text-[#3D342D]">{userLocation.altitude} m</strong></span>
               )}

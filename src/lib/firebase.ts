@@ -1,6 +1,12 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
   getAuth,
+  initializeAuth,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
+  inMemoryPersistence,
+  browserPopupRedirectResolver,
   GoogleAuthProvider,
   signInWithCredential as fbSignInWithCredential,
   signInWithPopup as fbSignInWithPopup,
@@ -55,7 +61,17 @@ const safeConfig = isConfigValid
 // Initialize Firebase App safely
 const app = getApps().length > 0 ? getApp() : initializeApp(safeConfig);
 
-export const auth = getAuth(app);
+let authInstance: Auth;
+try {
+  authInstance = initializeAuth(app, {
+    persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, inMemoryPersistence],
+    popupRedirectResolver: browserPopupRedirectResolver,
+  });
+} catch {
+  authInstance = getAuth(app);
+}
+
+export const auth = authInstance;
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
@@ -197,21 +213,32 @@ export const onAuthStateChanged = (
     };
   }
 
-  const unsubFb = fbOnAuthStateChanged(authInstance, (fbUser) => {
-    if (fbUser) {
-      currentLocalUser = fbUser;
-      try {
-        localStorage.setItem('vastu_local_user', JSON.stringify(fbUser));
-      } catch {}
-      callback(fbUser);
-    } else {
-      currentLocalUser = null;
-      try {
-        localStorage.removeItem('vastu_local_user');
-      } catch {}
-      callback(null);
+  const unsubFb = fbOnAuthStateChanged(
+    authInstance,
+    (fbUser) => {
+      if (fbUser) {
+        currentLocalUser = fbUser;
+        try {
+          localStorage.setItem('vastu_local_user', JSON.stringify(fbUser));
+        } catch {}
+        callback(fbUser);
+      } else {
+        currentLocalUser = null;
+        try {
+          localStorage.removeItem('vastu_local_user');
+        } catch {}
+        callback(null);
+      }
+    },
+    (error) => {
+      const msg = error?.message || String(error);
+      if (msg.includes('Database is closing') || msg.includes('closing/hidden') || (error as any)?.code === 'auth/internal-error') {
+        console.info('ℹ️ [Firebase Auth Notice]: Auth observer suppressed transient DB state notice:', msg);
+        return;
+      }
+      console.warn('Firebase Auth State Observer notice:', error);
     }
-  });
+  );
 
   return () => {
     const idx = localAuthListeners.indexOf(callback);
@@ -299,15 +326,23 @@ export const signInWithRedirect = async (authInstance: Auth, provider: any) => {
 };
 
 export const getRedirectResult = async (authInstance: Auth) => {
-  if (!isConfigValid) {
+  if (!isConfigValid || !authInstance) {
     return null;
   }
   try {
     return await fbGetRedirectResult(authInstance);
   } catch (err: any) {
+    const code = err?.code || '';
     const msg = err?.message || String(err);
-    if (msg.includes('Database is closing') || msg.includes('closing/hidden') || err?.code === 'auth/internal-error') {
-      console.info('ℹ️ [Firebase Auth Notice]: Redirect result skipped due to browser DB state:', msg);
+    if (
+      code === 'auth/argument-error' ||
+      code === 'auth/null-user' ||
+      code === 'auth/internal-error' ||
+      msg.includes('Database is closing') ||
+      msg.includes('closing/hidden') ||
+      msg.includes('auth/argument-error')
+    ) {
+      console.info('ℹ️ [Firebase Auth Notice]: Redirect result skipped or no redirect pending in current environment.');
       return null;
     }
     throw err;

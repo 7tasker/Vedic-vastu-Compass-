@@ -17,6 +17,15 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   public static getDerivedStateFromError(error: Error): State {
+    const msg = error?.message || String(error || '');
+    if (
+      msg.includes('Database is closing') ||
+      msg.includes('closing/hidden') ||
+      msg.includes('The database connection is closing')
+    ) {
+      console.info('ℹ️ ErrorBoundary suppressed transient DB closing event:', msg);
+      return { hasError: false, error: null };
+    }
     return { hasError: true, error };
   }
 

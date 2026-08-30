@@ -103,8 +103,11 @@ const logFirebaseAuthDiagnostic = (err: any, context: string) => {
   if (
     code === 'auth/popup-closed-by-user' ||
     code === 'auth/cancelled-popup-request' ||
+    code === 'auth/argument-error' ||
+    code === 'auth/null-user' ||
     message.includes('Database is closing') ||
-    message.includes('closing/hidden')
+    message.includes('closing/hidden') ||
+    message.includes('auth/argument-error')
   ) {
     console.info(`ℹ️ [Firebase Auth Notice - ${context}]: Google sign-in notice (${code}): ${message}`);
     return;
@@ -357,8 +360,10 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       setIsAuthLoading(false);
       if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
         setAuthError('Google sign-in was cancelled.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setAuthError('Firebase Notice: Current domain is not authorized in Firebase Authentication.');
       } else {
-        setAuthError(err?.message || 'Google sign-in failed.');
+        setAuthError(err?.message || 'Google sign-in failed. Please try again.');
       }
     }
   };
@@ -1003,7 +1008,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                   }}
                   className="py-2 px-3 bg-white hover:bg-[#FAF7F2] text-[#78350F] text-[11px] font-bold rounded-xl border border-[#E8DCC4] flex items-center justify-center gap-1.5 transition-all shadow-2xs"
                 >
-                  <Info className="w-3.5 h-3.5 text-[#D97706]" /> App Info & Improvements
+                  <Info className="w-3.5 h-3.5 text-[#D97706]" /> App Info & Version (v3.3.5)
                 </button>
               </div>
 
@@ -1345,7 +1350,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                   }}
                   className="py-2 px-3 bg-white hover:bg-[#FAF7F2] text-[#78350F] text-[11px] font-bold rounded-xl border border-[#E8DCC4] flex items-center justify-center gap-1.5 transition-all shadow-2xs"
                 >
-                  <Info className="w-3.5 h-3.5 text-[#D97706]" /> App Info & Version
+                  <Info className="w-3.5 h-3.5 text-[#D97706]" /> App Info & Version (v3.3.5)
                 </button>
               </div>
             </div>
