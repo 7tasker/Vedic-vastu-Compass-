@@ -9,8 +9,8 @@ android {
         applicationId "vedic.vastu.compass"
         minSdk 23
         targetSdk 35
-        versionCode 330
-        versionName "3.3.0"
+        versionCode 335
+        versionName "3.3.5"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Accommodate modern web assets

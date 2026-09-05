@@ -3321,27 +3321,19 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                             razorpayKeyId: e.target.value,
                           }))
                         }
-                        placeholder="rzp_live_..."
+                        placeholder="Enter Razorpay Key ID (or configured via RAZORPAY_KEY_ID)"
                         className="w-full text-xs font-mono bg-[#FAF7F2] border border-[#E8DCC4] rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-[#D97706]"
                       />
                     </div>
 
-                    <div>
-                      <label className="font-bold text-[#78350F] block mb-1 text-[11px]">
-                        Razorpay Key Secret:
-                      </label>
-                      <input
-                        type="password"
-                        value={gatewayConfig.razorpayKeySecret}
-                        onChange={(e) =>
-                          setGatewayConfig((prev) => ({
-                            ...prev,
-                            razorpayKeySecret: e.target.value,
-                          }))
-                        }
-                        placeholder="Enter Razorpay Secret..."
-                        className="w-full text-xs font-mono bg-[#FAF7F2] border border-[#E8DCC4] rounded-xl p-2.5 outline-none focus:ring-2 focus:ring-[#D97706]"
-                      />
+                    <div className="bg-[#ECFDF5] border border-[#A7F3D0] rounded-xl p-3 text-[#065F46] flex items-start gap-2.5">
+                      <ShieldCheck className="w-4 h-4 text-[#059669] shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold text-[11px] block">Server-Side Secret Protected</span>
+                        <span className="text-[10px] text-[#047857] leading-relaxed block mt-0.5">
+                          RAZORPAY_KEY_SECRET is securely configured in Secret Manager / Cloud Run backend. It is never exposed, edited, or stored in the browser.
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between pt-1">

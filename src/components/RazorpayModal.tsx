@@ -89,6 +89,20 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
       setShowGPayModal(false);
       setPaypalPayerEmail(user.email || 'buyer@sandbox.paypal.com');
 
+      // Fetch public Razorpay config (keyId, mode) from backend if available
+      fetch(getApiUrl('/api/payments/razorpay/config'))
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.keyId) {
+            setGatewayConfig((prev) => ({
+              ...prev,
+              razorpayKeyId: data.keyId,
+              razorpayMode: data.mode || prev.razorpayMode,
+            }));
+          }
+        })
+        .catch(() => {});
+
       // Default gateway selection logic
       if (cfg.razorpayEnabled) {
         setSelectedGateway('razorpay');
@@ -423,65 +437,8 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
 
     // 3. RAZORPAY / INDIAN UPI & BANKING FLOW
     if (selectedGateway === 'razorpay') {
-      const cleanKeyId = (gatewayConfig.razorpayKeyId || '').trim();
-      const isValidKey =
-        cleanKeyId.length >= 15 &&
-        (cleanKeyId.startsWith('rzp_test_') || cleanKeyId.startsWith('rzp_live_')) &&
-        !cleanKeyId.includes('YOUR_KEY');
-
-      const launchRazorpayModal = (orderId: string) => {
-        try {
-          const options = {
-            key: isValidKey ? cleanKeyId : (gatewayConfig.razorpayMode === 'test' ? 'rzp_test_vastu_sandbox' : cleanKeyId),
-            amount: Math.round(currentPlan.inr * 100),
-            currency: 'INR',
-            name: 'Vastu Compass Pro',
-            description: currentPlan.name,
-            order_id: orderId.startsWith('order_rzp_') || orderId.startsWith('order_sb_') ? undefined : orderId,
-            handler: function (response: any) {
-              finalizePayment(
-                response.razorpay_payment_id || `pay_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
-                response.razorpay_order_id || orderId,
-                'razorpay'
-              );
-            },
-            prefill: {
-              name: (user.name || 'Vedic Architect').trim(),
-              email: (user.email || 'user@vastudrishti.com').trim(),
-            },
-            theme: {
-              color: '#0C2340',
-            },
-            modal: {
-              ondismiss: function () {
-                setIsLoading(false);
-              },
-            },
-          };
-
-          const rzp = new window.Razorpay(options);
-          rzp.on('payment.failed', function (response: any) {
-            setIsLoading(false);
-            setPaymentError(response?.error?.description || 'Razorpay payment was not completed.');
-          });
-          rzp.open();
-        } catch (err) {
-          console.warn('Razorpay SDK launch notice:', err);
-          if (gatewayConfig.razorpayMode === 'test') {
-            // Test mode fallback
-            const fallbackOrderId = `order_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-            const fallbackPaymentId = `pay_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-            setTimeout(async () => {
-              await finalizePayment(fallbackPaymentId, fallbackOrderId, 'razorpay');
-            }, 800);
-          } else {
-            setIsLoading(false);
-            setPaymentError('Could not open Razorpay checkout. Please check your internet connection or verify Razorpay live keys in Admin.');
-          }
-        }
-      };
-
       try {
+        // Step 1: Create order on backend (backend uses process.env.RAZORPAY_KEY_ID & process.env.RAZORPAY_KEY_SECRET)
         const orderRes = await fetch(getApiUrl('/api/payments/razorpay/create-order'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -491,40 +448,119 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
             amountInr: currentPlan.inr,
             userEmail: user.email,
             userName: user.name,
-            customKeyId: gatewayConfig.razorpayKeyId,
-            customSecret: gatewayConfig.razorpayKeySecret,
-            customMode: gatewayConfig.razorpayMode,
           }),
-        }).catch(() => null);
+        }).catch((err) => {
+          console.error('Razorpay order creation request failed:', err);
+          return null;
+        });
 
-        const orderData = await orderRes?.json().catch(() => null);
-        const orderId = orderData?.orderId || orderData?.id || 'order_rzp_' + Math.random().toString(36).substring(2, 11);
+        if (!orderRes || !orderRes.ok) {
+          const errData = await orderRes?.json().catch(() => null);
+          setIsLoading(false);
+          setPaymentError(
+            errData?.error || 'Failed to create Razorpay order on server. Please verify Razorpay configuration.'
+          );
+          return;
+        }
+
+        const orderData = await orderRes.json().catch(() => null);
+        const orderId = orderData?.orderId || orderData?.id;
+        const activeKeyId = (orderData?.keyId || gatewayConfig.razorpayKeyId || '').trim();
+
+        if (!orderId || !activeKeyId) {
+          setIsLoading(false);
+          setPaymentError('Server did not return a valid Razorpay order or Key ID.');
+          return;
+        }
+
+        const launchRazorpayModal = (rzpOrderId: string, keyIdToUse: string) => {
+          try {
+            const options = {
+              key: keyIdToUse,
+              amount: orderData?.amount || Math.round(currentPlan.inr * 100),
+              currency: 'INR',
+              name: 'Vastu Compass Pro',
+              description: currentPlan.name,
+              order_id: rzpOrderId,
+              handler: async function (response: any) {
+                setIsLoading(true);
+                try {
+                  // Step 2: Verify signature server-side using HMAC SHA-256 with RAZORPAY_KEY_SECRET
+                  const verifyRes = await fetch(getApiUrl('/api/payments/razorpay/verify'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      razorpay_payment_id: response.razorpay_payment_id,
+                      razorpay_order_id: response.razorpay_order_id,
+                      razorpay_signature: response.razorpay_signature,
+                    }),
+                  });
+
+                  const verifyData = await verifyRes.json().catch(() => null);
+                  if (!verifyRes.ok || !verifyData?.verified) {
+                    setIsLoading(false);
+                    setPaymentError(
+                      verifyData?.error || 'Payment signature verification failed on server. Pro access was not granted.'
+                    );
+                    return;
+                  }
+
+                  // Successful signature verification confirmed by backend
+                  await finalizePayment(
+                    response.razorpay_payment_id,
+                    response.razorpay_order_id,
+                    'razorpay'
+                  );
+                } catch (err: unknown) {
+                  console.error('Razorpay verification error:', err);
+                  setIsLoading(false);
+                  setPaymentError('Could not verify Razorpay payment with server. Please try again.');
+                }
+              },
+              prefill: {
+                name: (user.name || 'Vedic Architect').trim(),
+                email: (user.email || 'user@vastudrishti.com').trim(),
+              },
+              theme: {
+                color: '#0C2340',
+              },
+              modal: {
+                ondismiss: function () {
+                  setIsLoading(false);
+                },
+              },
+            };
+
+            const rzp = new window.Razorpay(options);
+            rzp.on('payment.failed', function (response: any) {
+              setIsLoading(false);
+              setPaymentError(response?.error?.description || 'Razorpay payment was not completed.');
+            });
+            rzp.open();
+          } catch (err) {
+            console.error('Razorpay SDK launch notice:', err);
+            setIsLoading(false);
+            setPaymentError('Could not open Razorpay checkout. Please check your internet connection.');
+          }
+        };
 
         if (window.Razorpay) {
-          launchRazorpayModal(orderId);
+          launchRazorpayModal(orderId, activeKeyId);
           return;
         } else {
           // Dynamically load Razorpay SDK and launch
           const script = document.createElement('script');
           script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-          script.onload = () => launchRazorpayModal(orderId);
+          script.onload = () => launchRazorpayModal(orderId, activeKeyId);
           script.onerror = () => {
-            if (gatewayConfig.razorpayMode === 'test') {
-              const fallbackOrderId = `order_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-              const fallbackPaymentId = `pay_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-              setTimeout(async () => {
-                await finalizePayment(fallbackPaymentId, fallbackOrderId, 'razorpay');
-              }, 800);
-            } else {
-              setIsLoading(false);
-              setPaymentError('Razorpay checkout script failed to load. Please check your internet connection.');
-            }
+            setIsLoading(false);
+            setPaymentError('Razorpay checkout script failed to load. Please check your internet connection.');
           };
           document.body.appendChild(script);
           return;
         }
       } catch (err) {
-        console.warn('Razorpay initiation notice:', err);
+        console.error('Razorpay initiation notice:', err);
         setIsLoading(false);
         setPaymentError('Failed to initiate Razorpay order. Please try again.');
         return;
@@ -738,7 +774,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({
   };
 
   const isSandboxActive =
-    (selectedGateway === 'razorpay' && gatewayConfig.razorpayMode === 'test') ||
     (selectedGateway === 'paypal' && gatewayConfig.paypalMode === 'sandbox') ||
     (selectedGateway === 'gpay' && gatewayConfig.gpayEnvironment === 'TEST');
 

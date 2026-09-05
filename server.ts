@@ -1,14 +1,12 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import crypto from 'crypto';
+import Razorpay from 'razorpay';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
@@ -27,15 +25,21 @@ async function startServer() {
     next();
   });
 
-  // Shared Gemini AI Client (Server-side)
-  const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      },
-    },
-  });
+  // Lazy-initialized Gemini AI Client (Server-side)
+  let aiClient: GoogleGenAI | null = null;
+  function getGeminiClient(): GoogleGenAI | null {
+    if (!aiClient && process.env.GEMINI_API_KEY) {
+      aiClient = new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
+        },
+      });
+    }
+    return aiClient;
+  }
 
   // Health Check & Sync Status Endpoint
   app.get('/api/health', (_req, res) => {
@@ -368,10 +372,37 @@ app.post('/api/payments/paypal/verify', (req, res) => {
 // RAZORPAY (INR) BACKEND ENGINE
 // ==========================================
 
-// 0. Razorpay Configuration Endpoint
+// Helper: Retrieve and validate server-side Razorpay credentials
+function getRazorpayConfig() {
+  const keyId = (process.env.RAZORPAY_KEY_ID || '').trim();
+  const keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
+
+  if (!keyId || !keySecret) {
+    throw new Error(
+      'Razorpay is not configured. RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required.'
+    );
+  }
+
+  return {
+    keyId,
+    keySecret,
+    mode: keyId.startsWith('rzp_live_') ? ('live' as const) : ('test' as const),
+  };
+}
+
+// Helper: Lazy instantiate Razorpay SDK with server-side credentials
+function getRazorpayInstance(): Razorpay {
+  const config = getRazorpayConfig();
+  return new Razorpay({
+    key_id: config.keyId,
+    key_secret: config.keySecret,
+  });
+}
+
+// 0. Public Razorpay Configuration Endpoint (Key ID only - NEVER returns key secret)
 app.get('/api/payments/razorpay/config', (_req, res) => {
   try {
-    const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_YOUR_KEY_HERE';
+    const keyId = (process.env.RAZORPAY_KEY_ID || '').trim();
     const mode = keyId.startsWith('rzp_live_') ? 'live' : 'test';
     return res.json({
       keyId,
@@ -385,38 +416,85 @@ app.get('/api/payments/razorpay/config', (_req, res) => {
   }
 });
 
-// 1. Create Razorpay Order
-app.post('/api/payments/razorpay/create-order', (req, res) => {
+// 1. Create Razorpay Order Server-Side
+async function handleCreateRazorpayOrder(req: express.Request, res: express.Response) {
   try {
     const { planId, planName, amountInr, userEmail, userName } = req.body;
-    const validatedAmount = Number(amountInr || 1499);
+
+    const validatedAmount = Number(amountInr);
+    if (!validatedAmount || isNaN(validatedAmount) || validatedAmount <= 0) {
+      return res.status(400).json({ error: 'Valid amountInr is required' });
+    }
+
     const amountInPaise = Math.round(validatedAmount * 100);
-    const orderId = `order_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const config = getRazorpayConfig();
+    const razorpay = getRazorpayInstance();
+
+    const order = await razorpay.orders.create({
+      amount: amountInPaise,
+      currency: 'INR',
+      receipt: `rcpt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      notes: {
+        planId: String(planId || 'lifetime_pro'),
+        planName: String(planName || 'Vedic Lifetime Pro Pass'),
+        userEmail: String(userEmail || ''),
+        userName: String(userName || ''),
+      },
+    });
 
     return res.json({
       success: true,
-      orderId,
-      amount: amountInPaise,
-      currency: 'INR',
+      orderId: order.id,
+      id: order.id,
+      amount: order.amount,
+      currency: order.currency,
       planId: planId || 'lifetime_pro',
       planName: planName || 'Vedic Lifetime Pro Pass',
-      userEmail: userEmail || 'user@vastudrishti.com',
-      userName: userName || 'Vedic Architect',
+      userEmail: userEmail || '',
+      userName: userName || '',
+      keyId: config.keyId,
       createdAt: new Date().toISOString(),
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Error creating Razorpay order';
     return res.status(500).json({ error: message });
   }
-});
+}
 
-// 2. Verify Razorpay Payment Signature
+app.post('/api/payments/razorpay/create-order', handleCreateRazorpayOrder);
+app.post('/api/payments/razorpay/order', handleCreateRazorpayOrder);
+
+// 2. Verify Razorpay Payment Signature Server-Side using HMAC SHA-256
 app.post('/api/payments/razorpay/verify', (req, res) => {
   try {
     const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
 
-    if (!razorpay_payment_id) {
-      return res.status(400).json({ error: 'razorpay_payment_id is required' });
+    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+      return res.status(400).json({
+        verified: false,
+        error: 'Missing required parameters: razorpay_payment_id, razorpay_order_id, and razorpay_signature are required',
+      });
+    }
+
+    const { keySecret } = getRazorpayConfig();
+
+    const expectedSignature = crypto
+      .createHmac('sha256', keySecret)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    const signatureBuffer = Buffer.from(String(razorpay_signature), 'utf-8');
+    const expectedBuffer = Buffer.from(expectedSignature, 'utf-8');
+
+    const isMatch =
+      signatureBuffer.length === expectedBuffer.length &&
+      crypto.timingSafeEqual(signatureBuffer, expectedBuffer);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        verified: false,
+        error: 'Invalid payment signature. Verification failed.',
+      });
     }
 
     return res.json({
@@ -424,12 +502,12 @@ app.post('/api/payments/razorpay/verify', (req, res) => {
       status: 'completed',
       gateway: 'razorpay',
       paymentId: razorpay_payment_id,
-      orderId: razorpay_order_id || 'N/A',
+      orderId: razorpay_order_id,
       verifiedAt: new Date().toISOString(),
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Razorpay verification failed';
-    return res.status(500).json({ error: message });
+    return res.status(500).json({ verified: false, error: message });
   }
 });
 
@@ -663,8 +741,15 @@ Current Property Context:
 Placed Rooms:
 ${roomsSummary}`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+    const gemini = getGeminiClient();
+    if (!gemini) {
+      return res.json({
+        answer: `### 🕉️ 7Tasker Vastu Compass Support\n\n- **Support Timings:** Monday to Saturday, 9:00 AM – 7:00 PM IST\n- **Official Email:** support@vastucompass.app / admin@vastucompass.app\n- **Need Expert Help?** You can submit your property questions in the **Consultation** tab, or navigate to **House Audit** to place rooms and calculate your balance score.`,
+      });
+    }
+
+    const response = await gemini.models.generateContent({
+      model: 'gemini-2.5-flash',
       contents: userPromptText,
       config: {
         systemInstruction: systemPrompt,

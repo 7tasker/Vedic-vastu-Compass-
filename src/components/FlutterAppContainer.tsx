@@ -10,6 +10,7 @@ import { PropertyManagerModal } from './PropertyManagerModal';
 import { UserAccountModal } from './UserAccountModal';
 import { PrivacyAndAppInfoModal } from './PrivacyAndAppInfoModal';
 import { RazorpayModal } from './RazorpayModal';
+import { PlayStoreReviewModal } from './PlayStoreReviewModal';
 import { AdminDashboardView } from './AdminDashboardView';
 import { AppIntroModal } from './AppIntroModal';
 import { AdSenseUnit } from './AdSenseUnit';
@@ -73,6 +74,7 @@ import {
   BookOpen,
   Bell,
   BellRing,
+  Star,
 } from 'lucide-react';
 
 // Mangal Kalasham SVG Icon (Center of Attraction matching Indian traditional Kalasham artwork)
@@ -423,6 +425,7 @@ export const FlutterAppContainer: React.FC = () => {
   const [isRazorpayModalOpen, setIsRazorpayModalOpen] = useState<boolean>(false);
   const [isAppIntroOpen, setIsAppIntroOpen] = useState<boolean>(false);
   const [isLegalModalOpen, setIsLegalModalOpen] = useState<boolean>(false);
+  const [isPlayReviewModalOpen, setIsPlayReviewModalOpen] = useState<boolean>(false);
   const [legalModalTab, setLegalModalTab] = useState<'privacy' | 'app_info'>('privacy');
   const [selectedPlanForRazorpay, setSelectedPlanForRazorpay] = useState<string>('lifetime_pro');
   const [pendingPlanPurchase, setPendingPlanPurchase] = useState<string | null>(null);
@@ -1051,6 +1054,15 @@ export const FlutterAppContainer: React.FC = () => {
               </span>
             </button>
 
+            {/* Google Play Store Review Button */}
+            <button
+              onClick={() => setIsPlayReviewModalOpen(true)}
+              className="p-1.5 sm:p-2 rounded-xl bg-[#5C280B] hover:bg-[#431D08] text-[#FEF08A] hover:text-white transition-all text-xs border border-[#9A420F]/60 shadow-xs relative cursor-pointer group"
+              title="Rate App on Google Play Store"
+            >
+              <Star className="w-4 h-4 text-[#F59E0B] fill-[#F59E0B] group-hover:scale-110 transition-transform" />
+            </button>
+
             {/* Quick Temple Bell Audio Sound Toggle Button */}
             <button
               onClick={handleToggleSound}
@@ -1250,12 +1262,25 @@ export const FlutterAppContainer: React.FC = () => {
             setLegalModalTab('app_info');
             setIsLegalModalOpen(true);
           }}
+          onOpenPlayStoreReview={() => {
+            setIsAccountModalOpen(false);
+            setIsPlayReviewModalOpen(true);
+          }}
+        />
+
+        <PlayStoreReviewModal
+          isOpen={isPlayReviewModalOpen}
+          onClose={() => setIsPlayReviewModalOpen(false)}
+          userEmail={userProfile.email}
+          userName={userProfile.name}
+          sourceTrigger="manual_header"
         />
 
         <PrivacyAndAppInfoModal
           isOpen={isLegalModalOpen}
           initialTab={legalModalTab}
           onClose={() => setIsLegalModalOpen(false)}
+          onOpenPlayStoreReview={() => setIsPlayReviewModalOpen(true)}
         />
 
         <RazorpayModal

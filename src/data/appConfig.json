@@ -1,7 +1,7 @@
 {
   "appName": "Vastu Compass",
-  "version": "3.3.0",
-  "buildDate": "2026-08-24",
+  "version": "3.3.5",
+  "buildDate": "2026-08-30",
   "sensors": {
     "feedbackEngine": "3D Tilt-Compensated Magnetometer & Inclinometer Orientation",
     "permissionType": "geolocation & deviceorientation",

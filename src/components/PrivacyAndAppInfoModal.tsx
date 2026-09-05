@@ -14,6 +14,7 @@ import {
   Radio,
   RefreshCw,
   Smartphone,
+  Star,
 } from 'lucide-react';
 import {
   AppLegalAndInfoConfig,
@@ -25,12 +26,14 @@ interface PrivacyAndAppInfoModalProps {
   isOpen: boolean;
   initialTab?: 'privacy' | 'app_info';
   onClose: () => void;
+  onOpenPlayStoreReview?: () => void;
 }
 
 export const PrivacyAndAppInfoModal: React.FC<PrivacyAndAppInfoModalProps> = ({
   isOpen,
   initialTab = 'privacy',
   onClose,
+  onOpenPlayStoreReview,
 }) => {
   const [activeTab, setActiveTab] = useState<'privacy' | 'app_info'>(initialTab);
   const [config, setConfig] = useState<AppLegalAndInfoConfig>(DEFAULT_LEGAL_AND_INFO_CONFIG);
@@ -221,45 +224,8 @@ export const PrivacyAndAppInfoModal: React.FC<PrivacyAndAppInfoModalProps> = ({
                     <Calendar className="w-3.5 h-3.5 text-[#F59E0B]" /> Released: {config.appInfo.releaseDate}
                   </span>
                   <span className="flex items-center gap-1">
-                    <Smartphone className="w-3.5 h-3.5 text-[#F59E0B]" /> Runtime: Android Native APK (Capacitor)
+                    <Smartphone className="w-3.5 h-3.5 text-[#F59E0B]" /> Version: {config.appInfo.version}
                   </span>
-                  <span className="flex items-center gap-1">
-                    <Radio className="w-3.5 h-3.5 text-[#10B981]" /> Live OTA Sync: Active
-                  </span>
-                </div>
-              </div>
-
-              {/* Over-The-Air (OTA) Live Asset Sync Channel Banner */}
-              <div className="bg-gradient-to-r from-[#065F46] to-[#047857] text-white p-4 rounded-2xl border border-[#059669] shadow-xs space-y-2">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="p-1.5 bg-white/10 rounded-lg">
-                      <Radio className="w-4 h-4 text-[#A7F3D0] animate-pulse" />
-                    </span>
-                    <div>
-                      <h5 className="font-bold text-xs text-white">Over-The-Air (OTA) Live Asset Sync</h5>
-                      <p className="text-[10px] text-[#A7F3D0]">Live web bundle synchronization enabled for Android APK</p>
-                    </div>
-                  </div>
-                  <span className="px-2 py-0.5 bg-white/20 text-[#ECFDF5] text-[10px] font-mono font-bold rounded-full">
-                    OTA Channel: Production
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-[11px] text-[#ECFDF5]/90 border-t border-white/10">
-                  <div className="bg-white/10 px-2.5 py-1.5 rounded-lg">
-                    <span className="block text-[9px] text-[#A7F3D0] uppercase font-bold">Bundle Version</span>
-                    <span className="font-mono font-bold">{config.appInfo.version} ({config.appInfo.buildNumber})</span>
-                  </div>
-                  <div className="bg-white/10 px-2.5 py-1.5 rounded-lg">
-                    <span className="block text-[9px] text-[#A7F3D0] uppercase font-bold">OTA Status</span>
-                    <span className="font-semibold flex items-center gap-1 text-[#34D399]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#34D399] animate-ping" /> In Sync
-                    </span>
-                  </div>
-                  <div className="bg-white/10 px-2.5 py-1.5 rounded-lg col-span-2 sm:col-span-1">
-                    <span className="block text-[9px] text-[#A7F3D0] uppercase font-bold">Target Platform</span>
-                    <span className="font-semibold">Android 5.0+ (API 22-34)</span>
-                  </div>
                 </div>
               </div>
 
@@ -323,23 +289,45 @@ export const PrivacyAndAppInfoModal: React.FC<PrivacyAndAppInfoModalProps> = ({
                 </div>
               )}
 
-              {/* Tech Stack Specs */}
-              <div className="bg-white p-4 rounded-2xl border border-[#E8DCC4] space-y-2">
-                <h5 className="font-serif font-bold text-xs uppercase tracking-wider text-[#78350F] flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-[#D97706]" /> Technology & Framework Specifications
-                </h5>
-                <p className="text-xs text-[#8B735B]">{config.appInfo.developerInfo}</p>
+              {/* Rate & Review on Google Play Banner */}
+              <div className="bg-gradient-to-r from-[#FFFBEB] via-[#FEF3C7] to-[#FFFBEB] p-4 rounded-2xl border border-[#FDE68A] flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-[#D97706] text-white flex items-center justify-center shadow-xs shrink-0">
+                    <Star className="w-5 h-5 fill-[#FEF08A] text-[#FEF08A]" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs text-[#78350F] block">
+                      Enjoying Vastu Compass?
+                    </span>
+                    <span className="text-[11px] text-[#8B735B]">
+                      Rate us on Google Play Store to support authentic Vedic architecture tools.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onOpenPlayStoreReview) {
+                      onClose();
+                      onOpenPlayStoreReview();
+                    }
+                  }}
+                  className="w-full sm:w-auto px-4 py-2 bg-[#78350F] hover:bg-[#5C280B] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  <Star className="w-3.5 h-3.5 fill-[#F59E0B] text-[#F59E0B]" />
+                  <span>Rate on Play Store</span>
+                </button>
               </div>
 
-              {/* External App Specs / Doc URL Link */}
+              {/* Release Notes Link */}
               {config.appInfo.externalUrl && (
                 <div className="bg-[#FFFBEB] p-4 rounded-2xl border border-[#FDE68A] flex flex-col sm:flex-row items-center justify-between gap-3">
                   <div>
                     <span className="font-bold text-xs text-[#78350F] block">
-                      Release Documentation & Specs
+                      Release Documentation
                     </span>
                     <span className="text-[11px] text-[#8B735B]">
-                      View detailed release notes and API documentation
+                      View detailed release notes and guide
                     </span>
                   </div>
                   <a
@@ -348,7 +336,7 @@ export const PrivacyAndAppInfoModal: React.FC<PrivacyAndAppInfoModalProps> = ({
                     rel="noopener noreferrer"
                     className="w-full sm:w-auto px-4 py-2 bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 shrink-0"
                   >
-                    <span>View Docs URL</span>
+                    <span>View Release Notes</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 </div>

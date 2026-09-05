@@ -57,6 +57,7 @@ import {
   ChevronDown,
   ChevronUp,
   QrCode,
+  Star,
 } from 'lucide-react';
 import {
   getTaxReceiptConfig,
@@ -90,6 +91,7 @@ interface UserAccountModalProps {
   onOpenRazorpay?: (planId: string) => void;
   onOpenPrivacyPolicy?: () => void;
   onOpenAppInfo?: () => void;
+  onOpenPlayStoreReview?: () => void;
   soundEnabled?: boolean;
   onToggleSound?: () => void;
 }
@@ -99,12 +101,14 @@ const logFirebaseAuthDiagnostic = (err: any, context: string) => {
   const code = err?.code || 'unknown';
   const message = err?.message || String(err);
 
-  // If user closed the popup, cancelled request, or browser DB closing notice occurred, log as info notice instead of error
+  // If user closed the popup, cancelled request, timed out, or browser DB closing notice occurred, log as info notice instead of error
   if (
     code === 'auth/popup-closed-by-user' ||
     code === 'auth/cancelled-popup-request' ||
     code === 'auth/argument-error' ||
     code === 'auth/null-user' ||
+    code === 'auth/popup-blocked' ||
+    message.includes('POPUP_TIMEOUT') ||
     message.includes('Database is closing') ||
     message.includes('closing/hidden') ||
     message.includes('auth/argument-error')
@@ -147,6 +151,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
   onOpenRazorpay,
   onOpenPrivacyPolicy,
   onOpenAppInfo,
+  onOpenPlayStoreReview,
   soundEnabled = true,
   onToggleSound,
 }) => {
@@ -160,7 +165,8 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
   const [licenseMsg, setLicenseMsg] = useState('');
   const [authError, setAuthError] = useState('');
   const [authSuccessMsg, setAuthSuccessMsg] = useState('');
-  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [isEmailLoading, setIsEmailLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isVerifyingKey, setIsVerifyingKey] = useState(false);
 
   // Purchase & Order History State
@@ -239,7 +245,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
 
   // Google Sign-In Handler (Native @codetrix-studio/capacitor-google-auth on Android, web popup on desktop)
   const handleGoogleSignIn = async () => {
-    setIsAuthLoading(true);
+    setIsGoogleLoading(true);
     setAuthError('');
 
     try {
@@ -261,7 +267,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
             const userEmail = fbUser?.email || nativeUser.email || '';
             if (!userEmail) {
               setAuthError('Unable to retrieve email from Google Account.');
-              setIsAuthLoading(false);
+              setIsGoogleLoading(false);
               return;
             }
 
@@ -294,7 +300,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
             });
 
             playTempleBellChime();
-            setIsAuthLoading(false);
+            setIsGoogleLoading(false);
             onClose();
 
             if (isGoogleAdmin && onOpenAdminPanel) {
@@ -306,17 +312,30 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
           console.warn('Native Google Auth error:', nativeErr);
           if (nativeErr?.message?.includes('cancelled') || nativeErr?.code === '12501') {
             setAuthError('Google sign-in was cancelled.');
-            setIsAuthLoading(false);
+            setIsGoogleLoading(false);
             return;
           }
           setAuthError(nativeErr?.message || 'Google sign-in failed.');
-          setIsAuthLoading(false);
+          setIsGoogleLoading(false);
           return;
         }
       }
 
-      // 2. Web popup mode for desktop/browser preview
-      const result = await signInWithPopup(auth, googleProvider);
+      // 2. Web popup mode with quick fail-safe timer for iframe environments
+      const isIframe = window.self !== window.top;
+      const timeoutMs = isIframe ? 8000 : 25000;
+
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('POPUP_TIMEOUT'));
+        }, timeoutMs);
+      });
+
+      const result: any = await Promise.race([
+        signInWithPopup(auth, googleProvider),
+        timeoutPromise,
+      ]);
+
       if (result?.user) {
         const fbUser = result.user;
         const userEmail = fbUser.email || '';
@@ -348,22 +367,31 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
         });
 
         playTempleBellChime();
-        setIsAuthLoading(false);
+        setIsGoogleLoading(false);
         onClose();
 
         if (isGoogleAdmin && onOpenAdminPanel) {
           onOpenAdminPanel();
         }
+      } else {
+        setIsGoogleLoading(false);
       }
     } catch (err: any) {
       logFirebaseAuthDiagnostic(err, 'handleGoogleSignIn');
-      setIsAuthLoading(false);
-      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
-        setAuthError('Google sign-in was cancelled.');
+      setIsGoogleLoading(false);
+
+      if (err?.message === 'POPUP_TIMEOUT') {
+        setAuthError('Google sign-in popup cannot connect inside iframe preview. Please sign in directly with Email & Password below.');
+      } else if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+        setAuthError('Google sign-in window was closed.');
+      } else if (err.code === 'auth/popup-blocked') {
+        setAuthError('Popup window was blocked by your browser. Please allow popups or sign in with Email & Password below.');
       } else if (err.code === 'auth/unauthorized-domain') {
-        setAuthError('Firebase Notice: Current domain is not authorized in Firebase Authentication.');
+        setAuthError('Firebase Notice: Current domain is not in Firebase Authorized Domains. Please sign in with Email & Password below.');
+      } else if (err.code === 'auth/network-request-failed') {
+        setAuthError('Network error. Please check your internet connection and try again.');
       } else {
-        setAuthError(err?.message || 'Google sign-in failed. Please try again.');
+        setAuthError(err?.message || 'Google sign-in failed. Please sign in using Email & Password below.');
       }
     }
   };
@@ -392,7 +420,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
         return;
       }
 
-      setIsAuthLoading(true);
+      setIsEmailLoading(true);
 
       try {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -425,7 +453,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
         });
 
         playTempleBellChime();
-        setIsAuthLoading(false);
+        setIsEmailLoading(false);
         setPasswordInput('');
         onClose();
 
@@ -447,7 +475,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
           errorMsg = fbErr.message;
         }
         setAuthError(errorMsg);
-        setIsAuthLoading(false);
+        setIsEmailLoading(false);
       }
     } else if (authMode === 'signup') {
       if (!password || password.length < 6) {
@@ -455,7 +483,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
         return;
       }
 
-      setIsAuthLoading(true);
+      setIsEmailLoading(true);
       const isAdmin = isAdminEmail(email);
 
       try {
@@ -485,7 +513,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
         });
 
         playTempleBellChime();
-        setIsAuthLoading(false);
+        setIsEmailLoading(false);
         setPasswordInput('');
         setPhoneInput('');
         onClose();
@@ -504,7 +532,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
           errorMsg = err.message;
         }
         setAuthError(errorMsg);
-        setIsAuthLoading(false);
+        setIsEmailLoading(false);
       }
     }
   };
@@ -525,7 +553,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       return;
     }
 
-    setIsAuthLoading(true);
+    setIsEmailLoading(true);
     const isAdmin = isAdminEmail(email);
 
     try {
@@ -552,7 +580,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       });
 
       playTempleBellChime();
-      setIsAuthLoading(false);
+      setIsEmailLoading(false);
       setPasswordInput('');
       setPhoneInput('');
       setOtpCodeInput('');
@@ -578,7 +606,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
       });
 
       playTempleBellChime();
-      setIsAuthLoading(false);
+      setIsEmailLoading(false);
 
       if (isAdmin && onOpenAdminPanel) {
         onClose();
@@ -990,6 +1018,30 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                 </button>
               </div>
 
+              {/* Google Play Store Review Action */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenPlayStoreReview) {
+                    onOpenPlayStoreReview();
+                  }
+                }}
+                className="w-full py-2.5 px-3.5 bg-gradient-to-r from-[#FFFBEB] to-[#FEF3C7] hover:from-[#FEF3C7] hover:to-[#FDE68A] text-[#78350F] text-xs font-bold rounded-xl border border-[#FDE68A] shadow-2xs flex items-center justify-between transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-[#D97706] text-white flex items-center justify-center shadow-xs shrink-0">
+                    <Star className="w-3.5 h-3.5 fill-[#FEF08A] text-[#FEF08A]" />
+                  </div>
+                  <div className="text-left">
+                    <span className="block text-xs font-bold leading-tight">Rate on Google Play Store</span>
+                    <span className="block text-[9px] text-[#8B735B]">Share your in-app review & rating</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 text-[10px] font-extrabold text-[#D97706] bg-white px-2 py-0.5 rounded-md border border-[#FDE68A]">
+                  <span>5 ★</span>
+                </div>
+              </button>
+
               {/* App Info & Legal Links */}
               <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#E8DCC4]">
                 <button
@@ -1068,17 +1120,14 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
                     onChange={(e) => setOtpCodeInput(e.target.value.replace(/\D/g, ''))}
                     className="text-center text-lg font-mono tracking-widest bg-white border-2 border-[#D97706] rounded-xl p-3 w-full outline-none focus:ring-2 focus:ring-[#D97706] text-[#3D342D]"
                   />
-                  <p className="text-[10px] text-[#8B735B] text-center">
-                    Demo OTP: <span className="font-bold font-mono text-[#D97706]">{otpSession?.code}</span>
-                  </p>
                 </div>
 
                 <button
                   type="submit"
-                  disabled={isAuthLoading || otpTimerSeconds <= 0}
+                  disabled={isEmailLoading || otpTimerSeconds <= 0}
                   className="w-full py-3.5 bg-[#78350F] hover:bg-[#5C280B] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
-                  {isAuthLoading ? (
+                  {isEmailLoading ? (
                     <span>Verifying OTP & Creating Account...</span>
                   ) : (
                     <>
@@ -1135,32 +1184,51 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
               </div>
 
               {/* GOOGLE SIGN-IN BUTTON */}
-              <button
-                type="button"
-                disabled={isAuthLoading}
-                onClick={handleGoogleSignIn}
-                className="w-full py-3 px-4 bg-white hover:bg-gray-50 text-[#3C4043] border border-[#DADCE0] text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-60"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.28v3.15C3.26 21.3 7.31 24 12 24z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.28C.46 8.2 0 10.04 0 12s.46 3.8 1.28 5.42l4-3.15z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.28 6.58l4 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                  />
-                </svg>
-                <span>{isAuthLoading ? 'Signing In...' : 'Continue with Google'}</span>
-              </button>
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  disabled={isGoogleLoading}
+                  onClick={handleGoogleSignIn}
+                  className="w-full py-3 px-4 bg-white hover:bg-gray-50 text-[#3C4043] border border-[#DADCE0] text-xs font-bold rounded-xl transition-all shadow-xs flex items-center justify-center gap-2.5 cursor-pointer disabled:opacity-75"
+                >
+                  {isGoogleLoading ? (
+                    <div className="w-4 h-4 border-2 border-[#D97706] border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.28v3.15C3.26 21.3 7.31 24 12 24z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.28C.46 8.2 0 10.04 0 12s.46 3.8 1.28 5.42l4-3.15z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.28 6.58l4 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                      />
+                    </svg>
+                  )}
+                  <span>{isGoogleLoading ? 'Connecting Google...' : 'Continue with Google'}</span>
+                </button>
+
+                {isGoogleLoading && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsGoogleLoading(false);
+                      setAuthError('Sign-in cancelled. You can sign in using Email & Password or try Google again.');
+                    }}
+                    className="w-full text-center text-[11px] text-[#8B735B] hover:text-[#78350F] underline font-medium py-1"
+                  >
+                    Cancel / Reset
+                  </button>
+                )}
+              </div>
 
               <div className="relative flex py-1 items-center">
                 <div className="flex-grow border-t border-[#E8DCC4]" />
@@ -1287,10 +1355,10 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({
 
                 <button
                   type="submit"
-                  disabled={isAuthLoading}
+                  disabled={isEmailLoading}
                   className="w-full py-3.5 px-4 bg-[#78350F] hover:bg-[#5C280B] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-60 mt-2"
                 >
-                  {isAuthLoading ? (
+                  {isEmailLoading ? (
                     <span>{authMode === 'signin' ? 'Signing in...' : 'Processing...'}</span>
                   ) : authMode === 'signin' ? (
                     <>

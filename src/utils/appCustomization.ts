@@ -427,11 +427,9 @@ export const saveAdmin2FAConfig = (config: Admin2FAConfig): void => {
   } catch (e) {}
 };
 
-// TOTP Verification simulator algorithm (Generates deterministic 6-digit code for testing)
+// TOTP Verification algorithm (Generates deterministic 6-digit code based on secret key and 30-sec window)
 export const verifyTOTPCode = (code: string, secretKey: string): boolean => {
   if (!code || code.length !== 6) return false;
-  // Standard test bypass codes
-  if (code === '123456' || code === '888888') return true;
 
   // Simple deterministic hash based on secret + 30-sec window
   const timeSlice = Math.floor(Date.now() / 30000);
@@ -443,8 +441,17 @@ export const verifyTOTPCode = (code: string, secretKey: string): boolean => {
   }
   const generatedCode = String(Math.abs(hash) % 1000000).padStart(6, '0');
   
-  // Accept generated code or previous window code
-  return code === generatedCode || code === '654321';
+  // Accept current window code or previous window code (allowing 30s clock drift)
+  const prevSlice = timeSlice - 1;
+  let prevHash = 0;
+  const prevCombined = secretKey + prevSlice;
+  for (let i = 0; i < prevCombined.length; i++) {
+    prevHash = (prevHash << 5) - prevHash + prevCombined.charCodeAt(i);
+    prevHash |= 0;
+  }
+  const prevGeneratedCode = String(Math.abs(prevHash) % 1000000).padStart(6, '0');
+
+  return code === generatedCode || code === prevGeneratedCode;
 };
 
 // HELPERS FOR EMAIL TEMPLATES

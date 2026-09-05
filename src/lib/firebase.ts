@@ -64,7 +64,7 @@ const app = getApps().length > 0 ? getApp() : initializeApp(safeConfig);
 let authInstance: Auth;
 try {
   authInstance = initializeAuth(app, {
-    persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, inMemoryPersistence],
+    persistence: [browserLocalPersistence, browserSessionPersistence, inMemoryPersistence],
     popupRedirectResolver: browserPopupRedirectResolver,
   });
 } catch {
@@ -752,56 +752,42 @@ This is a spiritual practice, not a commercial product. By placing an order, you
   },
   appInfo: {
     title: 'Vastu Compass • Vedic Spatial Harmony Platform',
-    version: 'v3.3.0',
-    buildNumber: '330',
-    releaseDate: 'August 24, 2026',
-    externalUrl: 'https://vastucompass.app/release-notes-v3-3-0',
+    version: 'v3.3.5',
+    buildNumber: '335',
+    releaseDate: 'August 30, 2026',
+    externalUrl: 'https://vastucompass.app/release-notes-v3-3-5',
     improvements: [
-      '🧭 3D Tilt Compensation Engine: Hardware-accelerated Euler angle projections (Pitch β & Roll γ) maintaining precise azimuth accuracy during hand-held tilt.',
-      '🌐 True North (TN) vs Magnetic North (MN) Mode: Real-time World Magnetic Model (WMM) geomagnetic declination calculation with instant GPS-based toggle.',
-      '⚖️ Interactive Inclinometer & Bubble Level: Precision 2D spirit level visualizer with 0.1° surface leveling resolution and slope angle diagnostics.',
+      '🧭 Reorganized Compass Control Grid: Symmetrical quick-access buttons for Sensor power, 3D Tilt Compensation, Accuracy diagnostics, and Surface Level Inclinometer.',
+      '📐 3D Tilt Compensation Engine: Hardware-accelerated orientation tracking maintaining precise azimuth accuracy during hand-held tilt.',
+      '🌐 True North (TN) vs Magnetic North (MN) Mode: Real-time geomagnetic declination calculation with instant GPS-based toggle.',
+      '⚖️ Interactive Inclinometer & Spirit Level: Precision 2D surface level visualizer with 0.1° leveling resolution and slope angle diagnostics.',
       '🧲 Magnetic Field Intensity & Interference Meter: Live ambient flux monitoring in Microteslas (μT) with automated electromagnetic distortion warnings.',
-      '📍 High-Precision GPS DMS Ribbon: Real-time coordinate formatting in Degrees, Minutes, Seconds (DMS), altitude elevation, and GPS accuracy tracking.',
-      '🚀 Over-The-Air (OTA) Asset Sync Engine: Live background bundle update compatibility with Capacitor / Android WebView.',
-      '🪟 Interactive Popup Overlays: Full-screen Vastu Mandala visualizer, 16-Zone Deity & Limb detail cards, and audit reports.',
-      '📱 Centered & Responsive Mobile Layout: Single-finger touch ergonomics, bounded containers, and portrait/landscape adaptation.',
-      '📋 Unique Audit Report Reference Number (#RPT) with instant cloud syncing.',
-      '⚡ 45% reduction in initial bundle size and instant offline compass caching.',
+      '📍 High-Precision GPS DMS Ribbon: Real-time coordinate formatting in Degrees, Minutes, Seconds (DMS), altitude elevation, and accuracy tracking.',
+      '🪟 Interactive Vastu Mandala Viewer: 16-Zone Deity, body limb, and elemental Pancha Tattva room guidance.',
+      '📱 Refined Mobile Layout: Streamlined touch ergonomics, balanced padding, and responsive screen adaptation.',
+      '📋 Personalized Vastu audit reports with instant property reference numbering.',
     ],
     timeline: [
       {
-        version: 'v3.3.0',
-        buildNumber: '330',
-        releaseDate: 'August 24, 2026',
-        title: '3D Tilt Compensation, True North & Inclinometer Bubble Level',
+        version: 'v3.3.5',
+        buildNumber: '335',
+        releaseDate: 'August 30, 2026',
+        title: 'Reorganized Compass Controls, 3D Tilt Compensation & Inclinometer',
         type: 'major',
         highlights: [
-          'Implemented 3D Tilt-Compensated heading algorithm utilizing pitch and roll to eliminate hand-tilt azimuth drift.',
+          'Reorganized compass control toolbar into a balanced responsive grid for quick access on all devices.',
+          'Implemented 3D Tilt-Compensated heading algorithm to eliminate hand-tilt azimuth drift.',
           'Added True North (Geographic) vs Magnetic North toggle with dynamic GPS geomagnetic declination calculation.',
           'Built-in precision 2D Surface Inclinometer & Bubble Level with slope angle tracking for flat surface verification.',
           'Real-time ambient magnetic field sensor telemetry (μT) with smart electromagnetic interference detection.',
           'High-precision GPS DMS (Degrees, Minutes, Seconds) coordinate ribbon with altitude and declination readouts.',
-          'Updated App Improvement and release history timeline with detailed sensor architecture specifications.',
-        ],
-      },
-      {
-        version: 'v3.2.5',
-        buildNumber: '325',
-        releaseDate: 'August 21, 2026',
-        title: 'OTA Live Asset Sync & High-Precision Calibration',
-        type: 'feature',
-        highlights: [
-          'Over-The-Air (OTA) Live Asset Sync for instant web asset updates on mobile devices.',
-          'Pulsing Calibration Required real-time sensor prompt for magnetic distortion recovery.',
-          'Relocated zero offset reset to top right header bar for quick access.',
-          'Unified consistent Vastu Compass branding across Android Manifest and Capacitor configs.',
         ],
       },
       {
         version: 'v3.2.0',
         buildNumber: '320',
         releaseDate: 'August 12, 2026',
-        title: 'Vedic 16-Zone Energy Engine & Dual Multi-Currency Checkout',
+        title: 'Vedic 16-Zone Energy Engine & Multi-Currency Checkout',
         type: 'feature',
         highlights: [
           'Full 16-Zone Devata & Limb energy mapping with cardinal haptic locks.',
@@ -816,7 +802,7 @@ This is a spiritual practice, not a commercial product. By placing an order, you
         title: 'House Audit Reference #RPT Generator & Offline Storage',
         type: 'feature',
         highlights: [
-          'Automated Unique Audit Reference (#RPT) generation with cloud sync.',
+          'Automated Unique Audit Reference (#RPT) generation.',
           'Pancha Mahabhuta elemental weight calculations.',
         ],
       },
@@ -824,10 +810,10 @@ This is a spiritual practice, not a commercial product. By placing an order, you
         version: 'v3.0.0',
         buildNumber: '300',
         releaseDate: 'July 10, 2026',
-        title: 'Native Android Magnetometer & Sensor Calibration Suite',
+        title: 'Digital Compass & Sensor Calibration Suite',
         type: 'initial',
         highlights: [
-          'Real-time magnetometer fusion with exponential smoothing filters.',
+          'Real-time magnetometer sensor fusion with smoothing filters.',
           'Sensor 8-loop calibration guide & Quick-Zero physical facing offset.',
         ],
       },
@@ -1443,4 +1429,47 @@ export const clearAllTestingDataFromFirestore = async (): Promise<ResetDataResul
     message: `Backend data reset completed: Cleared ${deletedPayments} payments, ${deletedReports} reports, ${deletedConsultations} consultations, ${deletedLocations} geotags, and reset ${resetUsers} user test profiles.`,
   };
 };
+
+/**
+ * Record and sync customer reviews / feedback to Firestore
+ */
+export interface CustomerFeedbackRecord {
+  userEmail: string;
+  userName?: string;
+  feedbackType?: 'general' | 'improvement' | 'bug' | 'praise';
+  category?: 'rating' | 'feedback' | 'feature';
+  subject?: string;
+  message: string;
+  createdAt?: string;
+}
+
+export const submitCustomerFeedback = async (data: CustomerFeedbackRecord): Promise<{ success: boolean; id?: string }> => {
+  try {
+    const feedbackId = `review_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const record = {
+      ...data,
+      id: feedbackId,
+      createdAt: data.createdAt || new Date().toISOString(),
+      platform: typeof window !== 'undefined' && (window as any).Capacitor ? 'Android Native' : 'Web App',
+    };
+
+    if (db && isConfigValid) {
+      await setDoc(doc(db, 'customer_reviews', feedbackId), record);
+    }
+
+    // Cache locally as backup
+    try {
+      const existingStr = localStorage.getItem('vastu_saved_reviews') || '[]';
+      const existing = JSON.parse(existingStr);
+      existing.unshift(record);
+      localStorage.setItem('vastu_saved_reviews', JSON.stringify(existing.slice(0, 50)));
+    } catch {}
+
+    return { success: true, id: feedbackId };
+  } catch (err: any) {
+    console.warn('Could not save customer feedback to Firestore:', err);
+    return { success: false };
+  }
+};
+
 

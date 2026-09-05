@@ -12,10 +12,9 @@ export interface VastuPlanConfig {
 }
 
 export interface PaymentGatewayConfig {
-  // Razorpay (India)
+  // Razorpay (India) - Public Key ID & mode; Key Secret is strictly server-side (Cloud Run / Secret Manager)
   razorpayEnabled: boolean;
   razorpayKeyId: string;
-  razorpayKeySecret: string;
   razorpayMode: 'test' | 'live';
 
   // PayPal (Overseas)
@@ -70,33 +69,19 @@ export const getRazorpayDiagnostic = (config: PaymentGatewayConfig): GatewayDiag
       badgeClass: 'bg-gray-100 text-gray-600 border-gray-300',
       endpoint: 'https://api.razorpay.com/v1',
       mode: config.razorpayMode.toUpperCase(),
-      keyStatus: config.razorpayKeyId ? 'Configured' : 'Missing',
-      secretStatus: config.razorpayKeySecret ? 'Configured' : 'Missing',
+      keyStatus: config.razorpayKeyId ? 'Configured' : 'Server Environment',
+      secretStatus: 'Server-Side (Secret Manager)',
       details: 'Razorpay Gateway is toggled OFF by admin.',
     };
   }
 
   const keyId = (config.razorpayKeyId || '').trim();
-  const secret = (config.razorpayKeySecret || '').trim();
 
-  if (!keyId || !secret) {
-    return {
-      status: 'incomplete',
-      label: 'Missing API Keys',
-      badgeClass: 'bg-red-50 text-red-700 border-red-200',
-      endpoint: 'https://api.razorpay.com/v1',
-      mode: config.razorpayMode.toUpperCase(),
-      keyStatus: keyId ? 'Provided' : 'Missing',
-      secretStatus: secret ? 'Provided' : 'Missing',
-      details: 'Razorpay Key ID or Key Secret is empty.',
-    };
-  }
-
-  // Check prefix alignment
+  // Check prefix alignment if a key ID is provided
   const isTestKey = keyId.startsWith('rzp_test_');
   const isLiveKey = keyId.startsWith('rzp_live_');
 
-  if (config.razorpayMode === 'live' && isTestKey) {
+  if (keyId && config.razorpayMode === 'live' && isTestKey) {
     return {
       status: 'warning',
       label: 'Mode Mismatch (Test Key in Live Mode)',
@@ -104,12 +89,12 @@ export const getRazorpayDiagnostic = (config: PaymentGatewayConfig): GatewayDiag
       endpoint: 'https://api.razorpay.com/v1',
       mode: 'LIVE',
       keyStatus: 'rzp_test_... (Test Format)',
-      secretStatus: 'Provided',
+      secretStatus: 'Server-Side (Secret Manager)',
       details: 'Selected Live mode but Key ID starts with rzp_test_. Switch mode to Sandbox or provide rzp_live_ key.',
     };
   }
 
-  if (config.razorpayMode === 'test' && isLiveKey) {
+  if (keyId && config.razorpayMode === 'test' && isLiveKey) {
     return {
       status: 'warning',
       label: 'Mode Mismatch (Live Key in Test Mode)',
@@ -117,20 +102,20 @@ export const getRazorpayDiagnostic = (config: PaymentGatewayConfig): GatewayDiag
       endpoint: 'https://api.razorpay.com/v1',
       mode: 'TEST',
       keyStatus: 'rzp_live_... (Live Format)',
-      secretStatus: 'Provided',
+      secretStatus: 'Server-Side (Secret Manager)',
       details: 'Selected Test mode but Key ID starts with rzp_live_. Switch mode to Live or provide rzp_test_ key.',
     };
   }
 
   return {
     status: 'connected',
-    label: 'Connected & Linked',
+    label: 'Connected & Secure',
     badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     endpoint: 'https://api.razorpay.com/v1',
     mode: config.razorpayMode.toUpperCase(),
-    keyStatus: `${keyId.substring(0, 12)}...`,
-    secretStatus: '••••••••••••',
-    details: `Razorpay API keys linked successfully for ${config.razorpayMode.toUpperCase()} mode. Checkout active for INR payments.`,
+    keyStatus: keyId ? `${keyId.substring(0, 12)}...` : 'Server Environment Key ID',
+    secretStatus: 'Server-Side (Secret Manager)',
+    details: `Razorpay backend integration active for ${config.razorpayMode.toUpperCase()} mode. Secret is securely managed on the backend.`,
   };
 };
 
@@ -240,40 +225,31 @@ export const testGatewayConnection = async (
         };
       }
 
-      // Live backend health & order check
-      const backendRes = await fetch(getApiUrl('/api/payments/razorpay/create-order'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          planId: 'test_ping',
-          planName: 'Vastu Test Ping',
-          amountInr: 1,
-          userEmail: 'admin@vastu.com',
-          userName: 'Vedic Ping',
-        }),
-      }).catch(() => null);
-
+      // Public backend config ping
+      const backendRes = await fetch(getApiUrl('/api/payments/razorpay/config')).catch(() => null);
       const latencyMs = Math.round(performance.now() - start);
 
       if (backendRes && backendRes.ok) {
+        const data = await backendRes.json().catch(() => null);
+        const resolvedKey = data?.keyId || config.razorpayKeyId || '';
         return {
           gateway: 'razorpay',
           success: true,
-          message: `HTTP 200 OK - Razorpay Backend Gateway verified active! Key ID [${(config.razorpayKeyId || 'TEST').substring(0, 10)}...] online on ${diag.endpoint}.`,
+          message: `HTTP 200 OK - Razorpay Backend Gateway active! Key ID [${resolvedKey ? resolvedKey.substring(0, 10) + '...' : 'configured on server'}] online (${(data?.mode || config.razorpayMode).toUpperCase()}). Key Secret protected on server.`,
           latencyMs,
           timestamp,
           statusCode: 200,
-          environment: config.razorpayMode.toUpperCase(),
+          environment: (data?.mode || config.razorpayMode).toUpperCase(),
         };
       }
 
       return {
         gateway: 'razorpay',
-        success: true,
-        message: `HTTP 200 OK - Razorpay API parameters authenticated for ${config.razorpayMode.toUpperCase()} mode.`,
+        success: false,
+        message: 'Could not connect to Razorpay backend service. Check server status.',
         latencyMs,
         timestamp,
-        statusCode: 200,
+        statusCode: backendRes ? backendRes.status : 500,
         environment: config.razorpayMode.toUpperCase(),
       };
     } else if (gateway === 'paypal') {
@@ -375,8 +351,7 @@ const STORAGE_KEY = 'vastu_payment_gateway_config_v3';
 
 export const DEFAULT_PAYMENT_CONFIG: PaymentGatewayConfig = {
   razorpayEnabled: true,
-  razorpayKeyId: 'rzp_test_YOUR_KEY_HERE',
-  razorpayKeySecret: '',
+  razorpayKeyId: '',
   razorpayMode: 'test',
 
   paypalEnabled: true,
@@ -437,7 +412,6 @@ export const sanitizePaymentConfig = (config: PaymentGatewayConfig): PaymentGate
   return {
     ...config,
     razorpayKeyId: (config.razorpayKeyId || '').trim(),
-    razorpayKeySecret: (config.razorpayKeySecret || '').trim(),
     paypalClientId: (config.paypalClientId || '').trim(),
     paypalSecret: (config.paypalSecret || '').trim(),
     gpayMerchantId: (config.gpayMerchantId || '').trim(),
